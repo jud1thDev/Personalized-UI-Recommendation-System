@@ -413,7 +413,11 @@ def predict_and_generate_output(features_df, models, allowed_types):
     
     ui_raw = models['ui_type'].predict(X_processed)
     ui_idx = np.argmax(ui_raw, axis=1)
-    ui_label = [model_config["ui"]["allowed_component_types"][i % len(model_config["ui"]["allowed_component_types")] for i in ui_idx]
+    ui_label = [
+        model_config["ui"]["allowed_component_types"][i % len(model_config["ui"]["allowed_component_types"])]
+        for i in ui_idx
+    ]
+
     
     grp_raw = models['group_label'].predict(X_processed)
     grp_idx = np.argmax(grp_raw, axis=1)
