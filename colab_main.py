@@ -141,7 +141,7 @@ def access_time_cluster(ts: datetime) -> Literal["dawn","morning","afternoon","e
     if 18 <= h < 23: return "night"
     return "dawn"
 
-def generate_mock_data(n_users: int = 2000):
+def generate_mock_data(n_users: int = 20): # 개발용으로 임시 조정
     """모의 사용자 행동 데이터 생성"""
     print(f"   {n_users}명 사용자 데이터 생성 중...")
     
