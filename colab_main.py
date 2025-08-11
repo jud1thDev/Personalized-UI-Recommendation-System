@@ -385,10 +385,10 @@ exposure_model = train_model(features_df, "exposure_label", "binary", "exposure"
                             ["ui_type_label","service_cluster_label","label_text","rank_label"])
 
 ui_type_model = train_model(features_df, "ui_type_label", "multiclass", "ui_type", 
-                           ["exposure_label","rank_label"])
+                           ["exposure_label","service_cluster_label","label_text","rank_label"])
 
 group_label_model = train_model(features_df, "service_cluster_label", "multiclass", "group_label", 
-                               ["exposure_label","rank_label"])
+                               ["exposure_label","ui_type_label","label_text","rank_label"])
 
 rank_model = train_model(features_df, "rank_label", "regression", "rank", 
                         ["exposure_label","ui_type_label","service_cluster_label","label_text"])
