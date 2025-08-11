@@ -9,7 +9,7 @@
 3. **기능 그룹 및 레이블 예측** - 서비스 클러스터와 소제목 자동 생성
 4. **홈 화면 최적화** - 정보 밀도, 배치 순서, 레이아웃 자동 조정
 
-## 기술 스택
+## 시스템 구성
 - **데이터**: CSV 기반 사용자 행동 로그 (세션, 클릭, 체류시간, 경로 등)
 - **피처 엔지니어링**: 시간대, 세션 빈도, 경로 엔트로피, 기능별 사용 패턴
 - **모델**: LightGBM 4.x (Binary/Multi-class/Regression)
@@ -63,7 +63,7 @@ python -m ui_rec.src.models.rank             # 순위 모델 학습
 python -m ui_rec.src.inference.predict       # 추론 및 JSON 출력
 ```
 
-## 3-2. 코랩에서 실행
+## 코랩에서 실행
 COLAB_GUIDE.md 참고
 
 ## 출력
