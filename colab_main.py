@@ -253,39 +253,29 @@ def build_features(events_df):
     }).reset_index()
     
     print("   사용자-기능 단위 피처 생성 중...")
-    
-    # 사용자-기능 단위 집계
-    grp = events_df.groupby(["user_id","function_id"])  
+    grp = events_df.groupby(["user_id","function_id"])
     entry_count = grp.size().rename("entry_count")
     click_rate = grp["clicked"].mean().rename("click_rate")
     visit_duration = grp["dwell_seconds"].mean().rename("visit_duration")
     
-    # 재방문: 같은 기능 1시간 이내 재진입 횟수 근사
     events_sorted = events_df.sort_values(["user_id","function_id","timestamp"])  
     events_sorted["prev_ts"] = events_sorted.groupby(["user_id","function_id"])['timestamp'].shift(1)
     events_sorted["revisit"] = ((events_sorted["timestamp"] - events_sorted["prev_ts"]).dt.total_seconds() <= 3600).fillna(False)
     return_count = events_sorted.groupby(["user_id","function_id"])['revisit'].sum().rename("return_count")
     
-    # 마지막 사용 시점 기준 일수
     max_ts = events_df["timestamp"].max()
     last_access_days = (max_ts - grp["timestamp"].max()).dt.days.rename("last_access_days")
     
     uf = pd.concat([entry_count, click_rate, visit_duration, return_count, last_access_days], axis=1).reset_index()
     
     print("   타깃 변수 생성 중...")
-    
-    # 노출 여부 타깃: 클릭률/체류/재방문 가중 합이 임계치 이상
     score = (uf["click_rate"]*0.5 + (uf["visit_duration"]/uf["visit_duration"].max())*0.3 + (uf["return_count"]/max(1,uf["return_count"].max()))*0.2)
     uf["exposure_label"] = (score > score.quantile(0.5)).astype(int)
     
-    # UI 유형 타깃: 과거 관찰된 component_type 최빈값
     ui_type = events_df.groupby(["user_id","function_id"])['component_type'].agg(lambda x: x.value_counts().index[0]).rename("ui_type_label")
-    
-    # 그룹/소제목 타깃: 기능 메타로부터(최빈 cluster/label)
     cluster = events_df.groupby(["user_id","function_id"])['service_cluster'].agg(lambda x: x.value_counts().index[0]).rename("service_cluster_label")
     label = events_df.groupby(["user_id","function_id"])['label'].agg(lambda x: x.value_counts().index[0]).rename("label_text")
     
-    # 배치 순서 타깃: 사용자 내 기능별 점수 내림차순 순위(1 = 최상단)
     uf["rank_score"] = score
     uf["rank_label"] = uf.groupby("user_id")["rank_score"].rank(ascending=False, method="first")
     
@@ -293,23 +283,29 @@ def build_features(events_df):
                 .merge(cluster.reset_index(), on=["user_id","function_id"], how="left") \
                 .merge(label.reset_index(), on=["user_id","function_id"], how="left")
     
-    # 사용자 레벨 피처 결합 + 메타 정보(나이/디바이스 등)
     meta = events_df.groupby("user_id")[["age_group","is_senior","device_type"]].agg(lambda x: x.iloc[0]).reset_index()
     feat = uf.merge(user_df, on="user_id", how="left") 
     feat = feat.merge(meta, on="user_id", how="left")
     
-    # 타깃 생성 및 병합
-    feat = feat.merge(targets.drop(columns=["entry_count","click_rate","visit_duration","return_count","last_access_days","rank_score"]),
-                      on=["user_id","function_id"], how="left")
+    # 병합 전 exposure_label, rank_label 제거 (중복 방지)
+    if "exposure_label" in targets.columns:
+        targets = targets.drop(columns=["exposure_label", "rank_label"], errors="ignore")
     
-    # CSV 저장
+    # 타깃 생성 및 병합
+    feat = feat.merge(targets, on=["user_id","function_id"], how="left")
+    
+    # 컬럼명 수정 (_x, _y 제거)
+    feat = feat.rename(columns={
+        'exposure_label_x': 'exposure_label',
+        'rank_label_x': 'rank_label'
+    }).drop(columns=['exposure_label_y', 'rank_label_y'], errors='ignore')
+    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     features_path = f"data/processed/features_{timestamp}.csv"
     feat.to_csv(features_path, index=False)
     
     print(f"피처 생성 완료: {features_path}")
     print(f"   총 {len(feat)}개 샘플, {len(feat.columns)}개 피처")
-    
     return feat
 
 features_df = build_features(events_df)
