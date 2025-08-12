@@ -23,7 +23,7 @@ MANIFEST
 
 # Virtual Environment
 .env
-.venv
+.venv/
 env/
 venv/
 ENV/
@@ -36,6 +36,8 @@ venv.bak/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
 
 # OS
 .DS_Store
@@ -45,29 +47,30 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Project specific
-data/
-config/
-*.joblib
-*.csv
-*.json
-*.log
-*.yaml
-*.yml
-
-# Colab specific
+# Jupyter Notebook
 .ipynb_checkpoints/
 *.ipynb
+
+# Project specific - Generated data and models
+ui_rec/data/raw/*.csv
+ui_rec/data/processed/*.csv
+ui_rec/data/models/*.joblib
+ui_rec/data/outputs/*.json
+ui_rec/data/logs/*.log
+
+# Project specific - Config files (keep template, ignore generated)
+ui_rec/config/*.yaml
+ui_rec/config/*.yml
+!ui_rec/config/template.yaml
+!ui_rec/config/template.yml
 
 # Temporary files
 *.tmp
 *.temp
 *.bak
 *.backup
-
-# Jupyter Notebook
-.ipynb_checkpoints
 
 # pyenv
 .python-version
@@ -108,3 +111,10 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# Local development
+*.env.local
+.env.local
+.env.development
+.env.test
+.env.production

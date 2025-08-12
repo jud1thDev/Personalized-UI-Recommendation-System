@@ -5,8 +5,8 @@ import pandas as pd
 import numpy as np
 
 from ..utils.io import read_yaml, latest_file, load_model, ensure_dir
-from ..utils.schema import ui_response_template
 from ..models.common import apply_feature_mapping
+from ..models.ui_grouping import create_ui_component_groups
 
 CFG_DATA = read_yaml("ui_rec/config/data.yaml")
 CFG_MODEL = read_yaml("ui_rec/config/model.yaml")
@@ -60,11 +60,11 @@ def main():
     # 로드 모델들
     exposure = load_model(os.path.join(MODELS_DIR, "lgbm_exposure.joblib"))
     ui_type = load_model(os.path.join(MODELS_DIR, "lgbm_ui_type.joblib"))
-    group = load_model(os.path.join(MODELS_DIR, "lgbm_group_label.joblib"))
+    group = load_model(os.path.join(MODELS_DIR, "lgbm_service_cluster.joblib"))
     rank = load_model(os.path.join(MODELS_DIR, "lgbm_rank.joblib"))
 
     # 입력 X 구성(필요 타깃/누설 변수 제거)
-    drop_cols = ["exposure_label","ui_type_label","service_cluster_label","label_text","rank_label"]
+    drop_cols = ["exposure_label","ui_type_label","service_cluster_label","rank_label"]
     X = df.drop(columns=[c for c in drop_cols if c in df.columns])
     
     # 학습 시와 동일한 피처 컬럼 순서 보장 (저장된 매핑 사용)
@@ -92,24 +92,35 @@ def main():
 
     rank_pred = rank['model'].predict(X, num_iteration=rank['model'].best_iteration)
 
-    # 사용자별 JSON 생성
+    # 사용자별 JSON 생성 (그룹화 적용)
     outputs = []
     for user_id, udf in df.assign(include=exp_pred, ui=ui_label, grp=grp_label, order=rank_pred).groupby("user_id"):
         layout = layout_density_rule(bool(udf.is_senior.iloc[0]), float(udf.tap_path_entropy.iloc[0]))
-        items = []
+        
+        # 노출할 기능들만 필터링
+        exposed_functions = []
         for _, row in udf.iterrows():
             if int(row["include"]) == 0:
                 continue
-            items.append({
+            exposed_functions.append({
                 "function_id": row["function_id"],
-                "include": True,
                 "component_type": predict_allowed_ui(str(row["ui"]), allowed),
                 "service_cluster": str(row["grp"]),
-                "label": CFG_MODEL["service_clusters"]["labels"].get(str(row["grp"]), str(row.get("label_text",""))),
-                "order": float(row["order"])  # 프론트에서 정렬
+                "order": float(row["order"])
             })
-        items = sorted(items, key=lambda x: x["order"])  # 오름차순 배치
-        outputs.append(ui_response_template(user_id, layout, items))
+        
+        # ui_grouping.py를 사용해서 그룹화
+        groups = create_ui_component_groups(exposed_functions, user_name=f"U{user_id}")
+        
+        # 최종 출력 구조
+        output = {
+            "user_id": user_id,
+            "home": {
+                "layout_density": layout,
+                "groups": groups
+            }
+        }
+        outputs.append(output)
 
     ensure_dir(OUTPUTS_DIR)
     out_path = os.path.join(OUTPUTS_DIR, "ui_home_outputs.json")

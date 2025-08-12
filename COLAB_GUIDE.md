@@ -23,4 +23,3 @@ exec(open('colab_main.py').read())
 
 # 또는 직접 실행
 !python colab_main.py
-```

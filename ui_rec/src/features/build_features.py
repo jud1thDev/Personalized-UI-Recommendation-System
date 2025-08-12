@@ -57,17 +57,16 @@ def make_targets(uf: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     # UI 유형 타깃: 과거 관찰된 component_type 최빈값
     ui_type = df.groupby(["user_id","function_id"])['component_type'].agg(lambda x: x.value_counts().index[0]).rename("ui_type_label")
 
-    # 그룹/소제목 타깃: 기능 메타로부터(최빈 cluster/label)
+    # 그룹/소제목 타깃: 기능 메타로부터(최빈 cluster)
     cluster = df.groupby(["user_id","function_id"])['service_cluster'].agg(lambda x: x.value_counts().index[0]).rename("service_cluster_label")
-    label = df.groupby(["user_id","function_id"])['label'].agg(lambda x: x.value_counts().index[0]).rename("label_text")
+    # label 컬럼이 없으므로 제거
 
     # 배치 순서 타깃: 사용자 내 기능별 점수 내림차순 순위(1 = 최상단)
     uf["rank_score"] = score
     uf["rank_label"] = uf.groupby("user_id")["rank_score"].rank(ascending=False, method="first")
 
     targets = uf.merge(ui_type.reset_index(), on=["user_id","function_id"], how="left") \
-                .merge(cluster.reset_index(), on=["user_id","function_id"], how="left") \
-                .merge(label.reset_index(), on=["user_id","function_id"], how="left")
+                .merge(cluster.reset_index(), on=["user_id","function_id"], how="left")
     return targets
 
 

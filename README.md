@@ -46,21 +46,20 @@ pip install -r requirements.txt
 ### 2. 실행
 ```powershell
 # Windows PowerShell
-.\ui_rec\scripts\run_all.ps1
+.\.ui_rec\scripts\run_all.ps1
 
 # Linux/Mac
 bash ui_rec/scripts/run_all.sh
 ```
 
-### 3. 단계별 실행
 ```bash
 python -m ui_rec.src.data.generate_mock      # 모의 데이터 생성
 python -m ui_rec.src.features.build_features # 피처 생성
 python -m ui_rec.src.models.exposure         # 노출 모델 학습
 python -m ui_rec.src.models.ui_type          # UI 타입 모델 학습
-python -m ui_rec.src.models.group_label      # 그룹/레이블 모델 학습
+python -m ui_rec.src.models.service_cluster  # 서비스 클러스터 예측 모델 학습
 python -m ui_rec.src.models.rank             # 순위 모델 학습
-python -m ui_rec.src.inference.predict       # 추론 및 JSON 출력
+python -m ui_rec.src.inference.predict       # 추론 및 JSON 출력 (ui_grouping.py 로직 포함)
 ```
 
 ## 코랩에서 실행

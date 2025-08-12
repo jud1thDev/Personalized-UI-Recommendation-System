@@ -80,7 +80,7 @@ def apply_feature_mapping(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
 
 def train_binary(df: pd.DataFrame, target: str, model_name: str) -> str:
     params = CFG_MODEL["lgbm"]["exposure"].copy()
-    drop_cols = ["ui_type_label","service_cluster_label","label_text","rank_label"]
+    drop_cols = ["ui_type_label","service_cluster_label","rank_label"]
     X, y = split_xy(df, target, drop_cols)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
@@ -117,7 +117,7 @@ def train_multiclass(df: pd.DataFrame, target: str, model_key: str, model_name: 
     classes = df[target].astype("category").cat.categories.tolist()
     params["num_class"] = len(classes)
 
-    drop_cols = ["exposure_label","rank_label"]
+    drop_cols = ["exposure_label","rank_label","ui_type_label","service_cluster_label"]
     X, y = split_xy(df, target, drop_cols)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
@@ -152,7 +152,7 @@ def train_multiclass(df: pd.DataFrame, target: str, model_key: str, model_name: 
 
 def train_regression(df: pd.DataFrame, target: str, model_name: str) -> str:
     params = CFG_MODEL["lgbm"]["rank"].copy()
-    drop_cols = ["exposure_label","ui_type_label","service_cluster_label","label_text"]
+    drop_cols = ["exposure_label","ui_type_label","service_cluster_label","rank_label"]
     X, y = split_xy(df, target, drop_cols)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
