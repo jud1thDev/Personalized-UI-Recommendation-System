@@ -240,12 +240,23 @@ def predict_rank_colab(model_path: str, X: pd.DataFrame):
 
 def predict_all_models_colab(model_dir: str, X: pd.DataFrame):
     """모든 모델을 사용하여 예측을 수행하는 함수"""
+    # 예측 전에 범주형 변수 인코딩
+    X_encoded = X.copy()
+    
+    # 범주형 변수 인코딩
+    for col in X_encoded.select_dtypes(include=["object"]).columns:
+        X_encoded[col] = X_encoded[col].astype("category").cat.codes
+    
+    # bool은 정수로 변환
+    for col in X_encoded.select_dtypes(include=["bool"]).columns:
+        X_encoded[col] = X_encoded[col].astype("int8")
+    
     results = {}
     
     # 각 모델별 예측 수행
-    results['exposure'] = predict_exposure_colab(f"{model_dir}/exposure.joblib", X)
-    results['ui_type'] = predict_ui_type_colab(f"{model_dir}/ui_type.joblib", X)
-    results['service_cluster'] = predict_service_cluster_colab(f"{model_dir}/service_cluster.joblib", X)
-    results['rank'] = predict_rank_colab(f"{model_dir}/rank.joblib", X)
+    results['exposure'] = predict_exposure_colab(f"{model_dir}/exposure.joblib", X_encoded)
+    results['ui_type'] = predict_ui_type_colab(f"{model_dir}/ui_type.joblib", X_encoded)
+    results['service_cluster'] = predict_service_cluster_colab(f"{model_dir}/service_cluster.joblib", X_encoded)
+    results['rank'] = predict_rank_colab(f"{model_dir}/rank.joblib", X_encoded)
     
     return results 
