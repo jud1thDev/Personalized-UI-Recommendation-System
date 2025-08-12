@@ -540,7 +540,13 @@ with open('data/outputs/ui_home_outputs.json', 'w', encoding='utf-8') as f:
 
 print(f"추론 완료: {len(results)}명 사용자")
 
-# 6. 결과 요약
+# 6. 결과 파일 다운로드
+print("\n6. 결과 파일 다운로드 중...")
+from google.colab import files
+files.download('data/outputs/ui_home_outputs.json')
+print("다운로드 완료")
+
+# 7. 결과 요약
 print("\n" + "=" * 60)
 print("Personalized UI Recommendation System 실행 완료!")
 print(f"총 사용자: {len(results)}명")
