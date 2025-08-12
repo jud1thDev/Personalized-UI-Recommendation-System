@@ -1,19 +1,20 @@
 """
 UI 컴포넌트 그룹화 및 라벨링 모듈
-홈 화면에서 기능들을 UI 컴포넌트 타입별로 그룹화하고 의미있는 라벨을 생성
+Hugging Face AI 모델을 사용해서 자연스러운 라벨 자동 생성
 """
 
 from typing import List, Dict
 from collections import Counter
+import random
 
 
 def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> List[Dict]:
-    """UI 컴포넌트 타입별로 기능들을 그룹화하고 의미있는 라벨 생성"""
+    """UI 컴포넌트 타입별로 기능들을 그룹화하고 AI 기반 라벨 생성"""
     
     if len(functions) <= 2:
-        # 기능이 적으면 단일 그룹
-        label = generate_meaningful_label(functions, user_name)
-        return [{"label": label, "functions": functions, "component_type": "mixed"}]
+        # 1-2개 기능은 추천 기능 그룹으로 묶어버림
+        label = f"{user_name}님의 추천 기능" if user_name else "추천 기능"
+        return [{"label": label, "functions": functions, "component_type": "mixed", "function_count": len(functions)}]
     
     # UI 컴포넌트 타입별로 그룹화
     component_groups = {}
@@ -29,13 +30,18 @@ def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> Li
         if len(funcs) == 0:
             continue
             
-        # 의미있는 라벨 생성
-        label = generate_meaningful_label(funcs, user_name)
+        # AI 기반 라벨 생성 (3개 이상 기능)
+        if len(funcs) >= 3:
+            label = generate_ai_label(funcs, comp_type)
+        else:
+            # 1-2개 기능은 추천 기능 그룹
+            label = f"{user_name}님의 추천 기능" if user_name else "추천 기능"
         
         groups.append({
             "label": label,
             "functions": funcs,
             "component_type": comp_type,
+            "function_count": len(funcs),
             "ui_style": get_ui_component_style(comp_type)
         })
     
@@ -44,20 +50,19 @@ def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> Li
         # 기능 개수로 2-3개 그룹으로 분할
         mid_point = len(functions) // 2
         
-        first_label = generate_meaningful_label(functions[:mid_point], user_name)
-        second_label = generate_meaningful_label(functions[mid_point:], user_name)
-        
         return [
             {
-                "label": first_label,
+                "label": generate_ai_label(functions[:mid_point], "mixed"),
                 "functions": functions[:mid_point],
                 "component_type": "mixed",
+                "function_count": len(functions[:mid_point]),  # 기능 개수 추가
                 "ui_style": get_ui_component_style("mixed")
             },
             {
-                "label": second_label,
+                "label": generate_ai_label(functions[mid_point:], "mixed"),
                 "functions": functions[mid_point:],
-                "component_type": "mixed", 
+                "component_type": "mixed",
+                "function_count": len(functions[mid_point:]),  # 기능 개수 추가
                 "ui_style": get_ui_component_style("mixed")
             }
         ]
@@ -65,118 +70,48 @@ def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> Li
     return groups
 
 
-def generate_meaningful_label(functions: List[Dict], user_name: str = "") -> str:
-    """기능들의 특성을 분석해서 의미있는 라벨 생성"""
+def generate_ai_label(functions: List[Dict], component_type: str) -> str:
+    """Hugging Face AI 모델을 사용해서 라벨 생성"""
     
-    if len(functions) == 1:
-        # 단일 기능인 경우 제목 사용
-        func = functions[0]
-        if func.get("title"):
-            return func["title"]
-        return "추천 기능"
-    
-    # 기능들의 제목/부제목에서 키워드 추출
-    keywords = []
+    # 서비스 클러스터 분석
+    cluster_counts = Counter()
     for func in functions:
-        title = func.get("title", "").lower()
-        subtitle = func.get("subtitle", "").lower()
+        cluster = func.get("service_cluster", "unknown")
+        cluster_counts[cluster] += 1
+    
+    # 주요 서비스 클러스터 파악
+    if cluster_counts:
+        main_cluster = cluster_counts.most_common(1)[0][0]
         
-        # 의미있는 키워드 추출
-        meaningful_keywords = extract_meaningful_keywords(title + " " + subtitle)
-        keywords.extend(meaningful_keywords)
+        # AI 기반 라벨 생성
+        try:
+            from ..utils.ai_label_generator import create_ai_label_generator
+            ai_generator = create_ai_label_generator()
+            return ai_generator.generate_label(functions, main_cluster)
+        except Exception as e:
+            # AI 생성 실패 시 간단한 fallback
+            return get_simple_fallback_label(main_cluster)
     
-    # 키워드 빈도 분석
-    keyword_counts = Counter(keywords)
-    
-    if keyword_counts:
-        # 가장 빈도가 높은 키워드로 라벨 생성
-        top_keyword = keyword_counts.most_common(1)[0][0]
-        label = generate_keyword_based_label(top_keyword, functions)
-        
-        # 사용자 이름이 있으면 개인화
-        if user_name:
-            return f"{user_name}님의 {label}"
-        return label
-    
-    # 키워드가 없으면 기능 개수 기반으로 라벨 생성
-    if len(functions) <= 3:
-        if user_name:
-            return f"{user_name}님의 추천 기능"
-        return "추천 기능"
-    else:
-        if user_name:
-            return f"{user_name}님의 주요 기능"
-        return "주요 기능"
+    return "추천 기능"
 
 
-def extract_meaningful_keywords(text: str) -> List[str]:
-    """텍스트에서 의미있는 키워드 추출"""
-    keywords = []
-    
-    # 서비스 관련 키워드
-    service_keywords = [
-        "추천", "보안", "금융", "계좌", "결제", "송금", "대출", "투자",
-        "쇼핑", "혜택", "할인", "포인트", "적립", "건강", "운동",
-        "여행", "교통", "생활", "편의", "배달", "통신", "보험"
-    ]
-    
-    for keyword in service_keywords:
-        if keyword in text:
-            keywords.append(keyword)
-    
-    # 특별한 패턴이 있는지 확인
-    if "추천" in text or "맞춤" in text:
-        keywords.append("추천")
-    if "보안" in text or "인증" in text or "잠금" in text:
-        keywords.append("보안")
-    if "혜택" in text or "할인" in text or "%" in text:
-        keywords.append("혜택")
-    if "포인트" in text or "적립" in text:
-        keywords.append("포인트")
-    
-    return keywords
-
-
-def generate_keyword_based_label(keyword: str, functions: List[Dict]) -> str:
-    """키워드 기반으로 자연스러운 라벨 생성"""
-    
-    # 키워드별 자연스러운 라벨 매핑
-    keyword_labels = {
-        "추천": "추천 서비스",
-        "보안": "보안 서비스", 
-        "금융": "금융 서비스",
-        "계좌": "계좌 관리",
-        "결제": "결제 서비스",
-        "송금": "송금 서비스",
-        "대출": "대출 서비스",
-        "투자": "투자 서비스",
-        "쇼핑": "쇼핑 서비스",
-        "혜택": "특별 혜택",
-        "할인": "할인 정보",
-        "포인트": "포인트 서비스",
-        "적립": "적립 서비스",
-        "건강": "건강 관리",
-        "운동": "운동 서비스",
-        "여행": "여행 서비스",
-        "교통": "교통 서비스",
-        "생활": "생활 서비스",
-        "편의": "편의 서비스",
-        "배달": "배달 서비스",
-        "통신": "통신 서비스",
-        "보험": "보험 서비스"
+def get_simple_fallback_label(cluster: str) -> str:
+    """AI 생성 실패 시 간단한 fallback 라벨"""
+    simple_labels = {
+        "account": "계정",
+        "finance": "금융", 
+        "lifestyle": "생활",
+        "health": "건강",
+        "shopping": "쇼핑",
+        "travel": "여행",
+        "security": "보안",
+        "unknown": "기타"
     }
-    
-    base_label = keyword_labels.get(keyword, f"{keyword} 서비스")
-    
-    # 기능 개수에 따른 조정
-    if len(functions) <= 3:
-        return base_label
-    else:
-        return f"{base_label} 모음"
+    return simple_labels.get(cluster, cluster)
 
 
 def get_ui_component_style(component_type: str) -> Dict[str, str]:
-    """UI 컴포넌트 타입별 스타일 정보"""
+    """UI 컴포넌트 타입별 스타일 정보""" # ToDo: 추후 SDK 활용 예정
     
     base_styles = {
         "card": {

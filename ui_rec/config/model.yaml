@@ -1,0 +1,79 @@
+lgbm:
+  exposure:
+    objective: "binary"
+    metric: "auc"
+    learning_rate: 0.05
+    num_leaves: 63
+    max_depth: -1
+    min_data_in_leaf: 50
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    verbose: -1
+    num_boost_round: 500
+    early_stopping_rounds: 50
+  
+  ui_type:
+    objective: "multiclass"
+    metric: "multi_logloss"
+    learning_rate: 0.05
+    num_leaves: 63
+    max_depth: -1
+    min_data_in_leaf: 50
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    verbose: -1
+    num_boost_round: 500
+    early_stopping_rounds: 50
+  
+  service_cluster:
+    objective: "multiclass"
+    metric: "multi_logloss"
+    learning_rate: 0.05
+    num_leaves: 63
+    max_depth: -1
+    min_data_in_leaf: 50
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    verbose: -1
+    num_boost_round: 500
+    early_stopping_rounds: 50
+  
+  rank:
+    objective: "regression"
+    metric: "rmse"
+    learning_rate: 0.05
+    num_leaves: 63
+    max_depth: -1
+    min_data_in_leaf: 50
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    verbose: -1
+    num_boost_round: 500
+    early_stopping_rounds: 50
+
+ui:
+  allowed_component_types: ["card", "list_item", "banner", "icon", "grid_item"]
+
+service_clusters:
+  mapping:
+    f001: "account"
+    f002: "account"
+    f003: "account"
+    f004: "finance"
+    f005: "finance"
+    f006: "finance"
+    f007: "lifestyle"
+    f008: "lifestyle"
+    f009: "lifestyle"
+  labels:
+    account: "계좌/자산"
+    finance: "금융서비스"
+    lifestyle: "생활서비스"
+    health: "건강/포인트"
+    shopping: "쇼핑/혜택"
+    travel: "여행/교통"
+    recommendation: "추천서비스"

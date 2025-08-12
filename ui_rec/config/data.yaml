@@ -1,0 +1,10 @@
+paths:
+  raw_dir: "ui_rec/data/raw"
+  processed_dir: "ui_rec/data/processed"
+  models_dir: "ui_rec/data/models"
+  logs_dir: "ui_rec/data/logs"
+  outputs_dir: "ui_rec/data/outputs"
+
+files:
+  events_pattern: "events_*.csv"
+  features_pattern: "features_*.csv"

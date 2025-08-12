@@ -22,13 +22,10 @@ wheels/
 MANIFEST
 
 # Virtual Environment
-.env
 .venv/
-env/
 venv/
 ENV/
-env.bak/
-venv.bak/
+env/
 
 # IDE
 .vscode/
@@ -36,85 +33,27 @@ venv.bak/
 *.swp
 *.swo
 *~
-.project
-.pydevproject
 
 # OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 desktop.ini
 
-# Jupyter Notebook
-.ipynb_checkpoints/
-*.ipynb
-
-# Project specific - Generated data and models
-ui_rec/data/raw/*.csv
-ui_rec/data/processed/*.csv
-ui_rec/data/models/*.joblib
-ui_rec/data/outputs/*.json
-ui_rec/data/logs/*.log
-
-# Project specific - Config files (keep template, ignore generated)
-ui_rec/config/*.yaml
-ui_rec/config/*.yml
+# Project specific
+data/raw/*.csv
+data/processed/*.csv
+data/models/*.joblib
+data/outputs/*.json
+data/logs/*.log
+config/*.yaml
+config/*.yml
 !ui_rec/config/template.yaml
 !ui_rec/config/template.yml
+
+# Jupyter Notebook
+.ipynb_checkpoints/
 
 # Temporary files
 *.tmp
 *.temp
-*.bak
-*.backup
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# PEP 582
-__pypackages__/
-
-# Celery
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# Local development
-*.env.local
-.env.local
-.env.development
-.env.test
-.env.production
+*.log
