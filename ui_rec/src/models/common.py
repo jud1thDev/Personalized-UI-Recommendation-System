@@ -182,3 +182,24 @@ def train_regression(df: pd.DataFrame, target: str, model_name: str) -> str:
     out_path = os.path.join(MODELS_DIR, f"{model_name}.joblib")
     save_model(model_data, out_path)
     return out_path 
+
+
+def split_xy_colab(df: pd.DataFrame, target: str, drop_cols=None):
+    """Colab 환경에서 사용하는 데이터 분할 함수"""
+    if drop_cols is None:
+        drop_cols = []
+    
+    # 타겟 컬럼과 제거할 컬럼들을 제외한 피처 데이터
+    feature_cols = [col for col in df.columns if col not in [target] + drop_cols]
+    X = df[feature_cols].copy()
+    y = df[target].copy()
+    
+    # 범주형 변수 인코딩
+    for col in X.select_dtypes(include=["object"]).columns:
+        X[col] = X[col].astype("category").cat.codes
+    
+    # bool은 정수로 변환
+    for col in X.select_dtypes(include=["bool"]).columns:
+        X[col] = X[col].astype("int8")
+    
+    return X, y 

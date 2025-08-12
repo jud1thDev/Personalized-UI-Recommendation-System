@@ -86,12 +86,45 @@ def main():
 
     # 타깃 생성 및 병합
     targets = make_targets(uf, df)
-    feat = feat.merge(targets.drop(columns=["entry_count","click_rate","visit_duration","return_count","last_access_days","rank_score"]),
-                      on=["user_id","function_id"], how="left")
+    
+    # 중복 컬럼 문제 해결: 필요한 컬럼만 선택
+    target_columns = ["user_id", "function_id", "exposure_label", "ui_type_label", "service_cluster_label", "rank_label"]
+    targets_subset = targets[target_columns]
+    
+    feat = feat.merge(targets_subset, on=["user_id","function_id"], how="left")
 
     path = write_csv_with_timestamp(feat, base_name="features", out_dir=PROC_DIR)
     print(f"Saved features to {path}")
+    return path
 
 
 if __name__ == "__main__":
     main() 
+
+
+def build_features_colab(events_path: str) -> str:
+    """Colab 환경에서 사용하는 피처 생성 함수"""
+    df = pd.read_csv(events_path, parse_dates=["timestamp"])
+    
+    user_df = build_user_level(df)
+    uf = build_user_function(df)
+
+    # 사용자 레벨 피처 결합 + 메타 정보(나이/디바이스 등)
+    meta = df.groupby("user_id")[ ["age_group", "is_senior", "device_type"] ].agg(lambda x: x.iloc[0]).reset_index()
+    feat = uf.merge(user_df, on="user_id", how="left") 
+    feat = feat.merge(meta, on="user_id", how="left")
+
+    # 타깃 생성 및 병합
+    targets = make_targets(uf, df)
+    
+    # 중복 컬럼 문제 해결: 필요한 컬럼만 선택
+    target_columns = ["user_id", "function_id", "exposure_label", "ui_type_label", "service_cluster_label", "rank_label"]
+    targets_subset = targets[target_columns]
+    
+    feat = feat.merge(targets_subset, on=["user_id","function_id"], how="left")
+
+    # Colab 환경에 맞는 경로로 저장
+    from ..utils.io import write_csv_with_timestamp
+    path = write_csv_with_timestamp(feat, base_name="features", out_dir="ui_rec/data/processed")
+    print(f"Saved features to {path}")
+    return path 
