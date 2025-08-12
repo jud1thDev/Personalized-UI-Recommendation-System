@@ -396,9 +396,9 @@ print("  - Rank 모델 학습 중...")
 X_rank, y_rank = split_xy(features_df, 'rank', ['exposure', 'ui_type', 'service_cluster'])
 rank_model = train_model(X_rank, y_rank, "regression", model_config['lgbm']['rank'])
 models['rank'] = rank_model
-    
-    # 모델 저장
-    import joblib
+
+# 모델 저장
+import joblib
 for name, model in models.items():
     joblib.dump(model, f'data/models/lgbm_{name}.joblib')
 
