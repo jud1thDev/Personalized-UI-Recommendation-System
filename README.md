@@ -36,7 +36,7 @@ Personalized-UI-Recommendation-System/
 ### 1. 프로젝트 업로드
 1. **GitHub에서 다운로드**
    ```bash
-   git clone https://github.com/your-username/Personalized-UI-Recommendation-System.git
+   !git clone https://github.com/jud1thDev/Personalized-UI-Recommendation-System.git
    ```
 
 2. **Google Colab에서 파일 업로드**
