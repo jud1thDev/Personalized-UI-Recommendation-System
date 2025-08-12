@@ -18,14 +18,6 @@ import math
 from collections import Counter
 from typing import List, Dict, Any, Literal
 
-# 프로젝트 모듈 import
-sys.path.append('ui_rec/src')
-from models.ui_grouping import create_ui_component_groups
-from utils.icons import get_icon_suggestion
-from utils.io import read_yaml, ensure_dir, write_csv_with_timestamp, latest_file, save_model
-from utils.features import entropy
-from models.common import train_binary, train_multiclass, train_regression
-
 # 코랩 환경 설정
 os.makedirs('data/raw', exist_ok=True)
 os.makedirs('data/processed', exist_ok=True)
@@ -113,7 +105,8 @@ model_config = {
         }
     },
     "ui": {
-        "allowed_component_types": ["card", "list_item", "banner", "icon", "grid_item"]
+        "allowed_types": ["card", "list_item", "banner", "icon", "grid_item"],
+        "default_type": "card"
     },
     "service_clusters": {
         "mapping": {
@@ -123,12 +116,16 @@ model_config = {
             "f010": "health", "f011": "health", "f012": "health",
             "f013": "shopping", "f014": "shopping", "f015": "shopping",
             "f016": "travel", "f017": "travel", "f018": "travel",
-            "f019": "recommendation", "f020": "recommendation"
+            "f019": "security", "f020": "security"
         },
         "labels": {
-            "account": "계좌/자산", "finance": "금융 서비스", "lifestyle": "생활 서비스",
-            "health": "건강/포인트", "shopping": "쇼핑/혜택", "travel": "여행/교통", 
-            "recommendation": "추천서비스"
+            "account": "계정 관리",
+            "finance": "금융 서비스", 
+            "lifestyle": "라이프스타일",
+            "health": "건강 관리",
+            "shopping": "쇼핑",
+            "travel": "여행/교통",
+            "security": "보안"
         }
     }
 }
@@ -143,213 +140,409 @@ with open('config/model.yaml', 'w', encoding='utf-8') as f:
 print("설정 파일 생성 완료")
 
 # 2. 모의 데이터 생성
-print("2. 모의 데이터 생성 중...")
+print("\n2. 모의 데이터 생성 중...")
 
-def access_time_cluster(ts: datetime) -> Literal["dawn","morning","afternoon","evening","night"]:
-    """시간대별 클러스터 분류"""
-    h = ts.hour
-    if 5 <= h < 9: return "morning"
-    if 9 <= h < 13: return "afternoon"
-    if 13 <= h < 18: return "evening"
-    if 18 <= h < 23: return "night"
-    return "dawn"
-
-# generate_mock.py에서 생성된 데이터 읽기
-import glob
-
-# 가장 최근 events 파일 찾기
-events_files = glob.glob("data/raw/events_*.csv")
-if not events_files:
-    print("   events 파일을 찾을 수 없습니다. generate_mock.py를 먼저 실행해주세요.")
-    sys.exit(1)
-
-latest_events_file = max(events_files, key=os.path.getctime)
-print(f"   데이터 파일 읽기: {latest_events_file}")
-
-events_df = pd.read_csv(latest_events_file)
-print(f"   총 {len(events_df)}개 이벤트 로드 완료")
-
-# 사용자 정보 추출
-users_df = events_df[["user_id","age_group","is_senior","device_type"]].drop_duplicates().reset_index(drop=True)
-print(f"   총 {len(users_df)}명 사용자 정보 추출 완료")
-
-# 기능 정보 추출
-funcs_df = events_df[["function_id","service_cluster","title","subtitle"]].drop_duplicates().reset_index(drop=True)
-print(f"   총 {len(funcs_df)}개 기능 정보 추출 완료")
-
-# 3. 피처 생성 (build_features.py 모듈 직접 활용)
-print("3. 피처 생성 중...")
-
-# build_features.py 모듈 직접 실행
-import subprocess
-import sys
-
-# 모듈 실행
-result = subprocess.run([sys.executable, "-m", "ui_rec.src.features.build_features"], 
-                       capture_output=True, text=True, cwd=".")
-if result.returncode == 0:
-    print("   피처 생성 완료")
-    # 생성된 피처 파일 읽기
-    from ui_rec.src.utils.io import latest_file
-    features_path = latest_file("features_*.csv", "data/processed")
-    features_df = pd.read_csv(features_path)
-    print(f"   총 {len(features_df)}개 샘플, {len(features_df.columns)}개 피처")
-else:
-    print(f"   피처 생성 실패: {result.stderr}")
-    sys.exit(1)
-
-# 4. 모델 학습 (common.py 모듈 활용)
-print("4. 모델 학습 중...")
-
-# 각 모델 학습
-exposure_model_path = train_binary(features_df, "exposure_label", "lgbm_exposure")
-ui_type_model_path = train_multiclass(features_df, "ui_type_label", "ui_type", "lgbm_ui_type")
-service_cluster_model_path = train_multiclass(features_df, "service_cluster_label", "service_cluster", "lgbm_service_cluster")
-rank_model_path = train_regression(features_df, "rank_label", "lgbm_rank")
-
-print("모든 모델 학습 완료")
-
-# 5. 추론 및 결과 생성
-print("5. 추론 및 결과 생성 중...")
-
-def predict_and_generate_output_colab(features_df, allowed_types):
-    """추론 및 JSON 출력 생성 (코랩용)"""
-    print("   추론 실행 중...")
-    
-    # 입력 데이터 준비
-    drop_cols = ["exposure_label","ui_type_label","service_cluster_label","rank_label"]
-    X = features_df.drop(columns=[c for c in drop_cols if c in features_df.columns])
-    
-    # 피처 전처리
-    X_processed, _ = preprocess_features(features_df, "exposure_label", drop_cols)
-    
-    # 예측
-    exp_prob = exposure_model.predict(X_processed)
-    exp_pred = (exp_prob > 0.7).astype(int)
-    
-    ui_raw = ui_type_model.predict(X_processed)
-    ui_idx = np.argmax(ui_raw, axis=1)
-    ui_label = [
-        model_config["ui"]["allowed_component_types"][i % len(model_config["ui"]["allowed_component_types"])]
-        for i in ui_idx
-    ]
-    
-    grp_raw = service_cluster_model.predict(X_processed)
-    grp_idx = np.argmax(grp_raw, axis=1)
-    grp_label = [list(model_config["service_clusters"]["labels"].keys())[i % len(model_config["service_clusters"]["labels"])] for i in grp_idx]
-    
-    rank_pred = rank_model.predict(X_processed)
-    
-    # 사용자별 JSON 생성
-    outputs = []
-    for user_id, udf in features_df.assign(include=exp_pred, ui=ui_label, grp=grp_label, order=rank_pred).groupby("user_id"):
-        # 레이아웃 밀도 결정
-        is_senior = bool(udf.is_senior.iloc[0])
-        path_entropy = float(udf.tap_path_entropy.iloc[0])
-        
-        if is_senior:
-            layout = "low" if path_entropy < 1.2 else "medium"
-        else:
-            layout = "medium" if path_entropy < 1.5 else "high"
-        
-        # 노출할 기능들만 필터링
-        exposed_functions = []
-        for _, row in udf.iterrows():
-            if int(row["include"]) == 0:
-                continue
-            
-            # 허용된 UI 타입 사용 (아이콘 포함)
-            ui_type = str(row["ui"])
-            if ui_type not in allowed_types:
-                ui_type = "card"  # 허용되지 않은 타입만 카드로 대체
-            
-            # 서비스 클러스터에 따른 추천 아이콘 결정
-            icon_suggestion = get_icon_suggestion(str(row["grp"]))
-            
-            exposed_functions.append({
-                "function_id": row["function_id"],
-                "component_type": ui_type,
-                "service_cluster": str(row["grp"]),
-                "order": float(row["order"]),
-                "icon_suggestion": icon_suggestion  # 아이콘 제안 정보 포함
-            })
-        
-        # ui_grouping.py를 사용해서 그룹화
-        groups = create_ui_component_groups(exposed_functions, user_name=f"U{user_id}")
-        
-        # 최종 출력 구조
-        output = {
-            "user_id": user_id,
-            "home": {
-                "layout_density": layout,
-                "groups": groups
-            }
+def generate_users(n_users=20):
+    """사용자 데이터 생성"""
+    users = []
+    for i in range(n_users):
+        user = {
+            "user_id": f"U{i:05d}",
+            "age": random.randint(20, 80),
+            "gender": random.choice(["M", "F"]),
+            "senior": random.choice([True, False]),
+            "premium": random.choice([True, False]),
+            "location": random.choice(["Seoul", "Busan", "Incheon", "Daegu", "Daejeon"])
         }
-        outputs.append(output)
-    
-    # JSON 저장
-    output_path = "data/outputs/ui_home_outputs.json"
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(outputs, f, ensure_ascii=False, indent=2)
-    
-    print(f"추론 완료: {output_path}")
-    print(f"   총 {len(outputs)}명 사용자에 대한 홈 화면 구성 생성")
-    
-    return outputs
+        users.append(user)
+    return users
 
-def preprocess_features(df, target_col, drop_cols=None):
-    """피처 전처리 - 모든 피처를 숫자로 변환"""
+def generate_functions():
+    """기능 데이터 생성"""
+    functions = []
+    for i in range(1, 21):
+        func = {
+            "function_id": f"f{i:03d}",
+            "name": f"Function {i}",
+            "category": random.choice(["account", "finance", "lifestyle", "health", "shopping", "travel", "security"]),
+            "complexity": random.randint(1, 5)
+        }
+        functions.append(func)
+    return functions
+
+def simulate_events(users, funcs, days=7):
+    """사용자 이벤트 시뮬레이션"""
+    events = []
+    start_date = datetime.now() - timedelta(days=days)
+    
+    for user in users:
+        # 사용자별 세션 수 (1-5개)
+        n_sessions = random.randint(1, 5)
+        
+        for session in range(n_sessions):
+            session_start = start_date + timedelta(
+                days=random.randint(0, days),
+                hours=random.randint(0, 23),
+                minutes=random.randint(0, 59)
+            )
+            
+            # 세션당 기능 사용 수 (1-8개)
+            n_functions = random.randint(1, 8)
+            used_functions = random.sample(funcs, min(n_functions, len(funcs)))
+            
+            for func in used_functions:
+                # 기능별 사용 패턴
+                n_clicks = random.randint(1, 10)
+                visit_duration = random.randint(10, 300)  # 초
+                
+                for click in range(n_clicks):
+                    event = {
+                        "user_id": user["user_id"],
+                        "function_id": func["function_id"],
+                        "timestamp": session_start + timedelta(
+                            minutes=click * random.randint(1, 5)
+                        ),
+                        "event_type": "click",
+                        "session_id": f"{user['user_id']}_s{session}",
+                        "click_count": click + 1,
+                        "visit_duration": visit_duration,
+                        "return_count": random.randint(0, 3)
+                    }
+                    events.append(event)
+    
+    return events
+
+# 데이터 생성 실행
+users = generate_users(20)
+funcs = generate_functions()
+events = simulate_events(users, funcs, 7)
+
+# CSV로 저장
+events_df = pd.DataFrame(events)
+events_df.to_csv('data/raw/events.csv', index=False, encoding='utf-8')
+
+print(f"모의 데이터 생성 완료: {len(users)}명 사용자, {len(events)}개 이벤트")
+
+# 3. 피처 생성
+print("\n3. 피처 생성 중...")
+
+def build_features_colab():
+    """피처 생성 (코랩용)"""
+    # 이벤트 데이터 로드
+    events_df = pd.read_csv('data/raw/events.csv')
+    
+    # 사용자별 피처 생성
+    user_features = []
+    
+    for user_id in events_df['user_id'].unique():
+        user_events = events_df[events_df['user_id'] == user_id]
+        
+        # 기본 피처
+        features = {
+            'user_id': user_id,
+            'total_events': len(user_events),
+            'unique_functions': user_events['function_id'].nunique(),
+            'total_sessions': user_events['session_id'].nunique(),
+            'avg_click_count': user_events.groupby('function_id')['click_count'].max().mean(),
+            'avg_visit_duration': user_events['visit_duration'].mean(),
+            'avg_return_count': user_events['return_count'].mean()
+        }
+        
+        # 시간대별 피처
+        user_events['hour'] = pd.to_datetime(user_events['timestamp']).dt.hour
+        features['morning_usage'] = len(user_events[user_events['hour'].between(6, 11)])
+        features['afternoon_usage'] = len(user_events[user_events['hour'].between(12, 17)])
+        features['evening_usage'] = len(user_events[user_events['hour'].between(18, 23)])
+        features['night_usage'] = len(user_events[user_events['hour'].between(0, 5)])
+        
+        # 세션 패턴
+        session_durations = []
+        for session_id in user_events['session_id'].unique():
+            session_events = user_events[user_events['session_id'] == session_id]
+            if len(session_events) > 1:
+                start_time = pd.to_datetime(session_events['timestamp'].min())
+                end_time = pd.to_datetime(session_events['timestamp'].max())
+                duration = (end_time - start_time).total_seconds() / 60  # 분
+                session_durations.append(duration)
+        
+        features['avg_session_duration'] = np.mean(session_durations) if session_durations else 0
+        
+        user_features.append(features)
+    
+    # 기능별 피처 생성
+    function_features = []
+    
+    for function_id in events_df['function_id'].unique():
+        func_events = events_df[events_df['function_id'] == function_id]
+        
+        features = {
+            'function_id': function_id,
+            'total_clicks': len(func_events),
+            'unique_users': func_events['user_id'].nunique(),
+            'avg_click_per_user': len(func_events) / func_events['user_id'].nunique(),
+            'avg_visit_duration': func_events['visit_duration'].mean(),
+            'return_rate': (func_events['return_count'] > 0).mean()
+        }
+        
+        function_features.append(features)
+    
+    # 사용자-기능 조합 피처
+    user_function_features = []
+    
+    for user_id in events_df['user_id'].unique():
+        for function_id in events_df['function_id'].unique():
+            user_func_events = events_df[
+                (events_df['user_id'] == user_id) & 
+                (events_df['function_id'] == function_id)
+            ]
+            
+            if len(user_func_events) > 0:
+                features = {
+                    'user_id': user_id,
+                    'function_id': function_id,
+                    'click_count': len(user_func_events),
+                    'visit_duration': user_func_events['visit_duration'].sum(),
+                    'return_count': user_func_events['return_count'].sum(),
+                    'last_access_days': (datetime.now() - pd.to_datetime(user_func_events['timestamp'].max())).days
+                }
+                
+                # 세션 관련 피처
+                sessions = user_func_events['session_id'].unique()
+                features['session_count'] = len(sessions)
+                features['avg_clicks_per_session'] = len(user_func_events) / len(sessions)
+                
+                user_function_features.append(features)
+    
+    # 피처 결합
+    user_df = pd.DataFrame(user_features)
+    function_df = pd.DataFrame(function_features)
+    user_function_df = pd.DataFrame(user_function_features)
+    
+    # 최종 피처 데이터프레임 생성
+    final_features = user_function_df.merge(user_df, on='user_id', suffixes=('', '_user'))
+    final_features = final_features.merge(function_df, on='function_id', suffixes=('', '_func'))
+    
+    # 타겟 변수 생성
+    final_features['exposure'] = (final_features['click_count'] > 0).astype(int)
+    final_features['ui_type'] = np.random.choice(['card', 'list_item', 'banner', 'icon'], size=len(final_features))
+    final_features['service_cluster'] = final_features['function_id'].map(model_config['service_clusters']['mapping'])
+    final_features['rank'] = np.random.uniform(1, 10, size=len(final_features))
+    
+    # CSV로 저장
+    final_features.to_csv('data/processed/features.csv', index=False, encoding='utf-8')
+    
+    return final_features
+
+# 피처 생성 실행
+features_df = build_features_colab()
+print(f"피처 생성 완료: {len(features_df)}개 샘플")
+
+# 4. 모델 학습
+print("\n4. 모델 학습 중...")
+
+def split_xy(df, target_col, drop_cols=None):
+    """X, y 분리"""
     if drop_cols is None:
         drop_cols = []
     
     X = df.drop(columns=[target_col] + drop_cols)
-    
-    # 모든 object 컬럼을 범주형 코드로 변환
-    for col in X.select_dtypes(include=["object"]).columns:
-        X[col] = X[col].astype("category").cat.codes
-    
-    # bool은 정수로 변환
-    for col in X.select_dtypes(include=["bool"]).columns:
-        X[col] = X[col].astype("int8")
-    
-    # category 컬럼을 정수로 변환
-    for col in X.select_dtypes(include=["category"]).columns:
-        X[col] = X[col].cat.codes
-    
     y = df[target_col]
     
-    # 타겟 변수가 문자열인 경우 숫자로 인코딩
-    if y.dtype == "object":
-        y = y.astype("category").cat.codes
+    # 수치형 컬럼만 선택
+    numeric_cols = X.select_dtypes(include=[np.number]).columns
+    X = X[numeric_cols]
     
     return X, y
 
-# 모델 로드
+def train_model(X, y, model_type, params):
+    """모델 학습"""
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    if model_type == "binary":
+        model = lgb.LGBMClassifier(**params)
+        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], callbacks=[lgb.early_stopping(50)])
+    elif model_type == "multiclass":
+        model = lgb.LGBMClassifier(**params)
+        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], callbacks=[lgb.early_stopping(50)])
+    else:  # regression
+        model = lgb.LGBMRegressor(**params)
+        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], callbacks=[lgb.early_stopping(50)])
+    
+    return model
+
+# 모델 학습 실행
+models = {}
+
+# 1) Exposure 모델 (Binary)
+print("  - Exposure 모델 학습 중...")
+X_exposure, y_exposure = split_xy(features_df, 'exposure', ['ui_type', 'service_cluster', 'rank'])
+exposure_model = train_model(X_exposure, y_exposure, "binary", model_config['lgbm']['exposure'])
+models['exposure'] = exposure_model
+
+# 2) UI Type 모델 (Multiclass)
+print("  - UI Type 모델 학습 중...")
+X_ui_type, y_ui_type = split_xy(features_df, 'ui_type', ['exposure', 'service_cluster', 'rank'])
+ui_type_model = train_model(X_ui_type, y_ui_type, "multiclass", model_config['lgbm']['ui_type'])
+models['ui_type'] = ui_type_model
+
+# 3) Service Cluster 모델 (Multiclass)
+print("  - Service Cluster 모델 학습 중...")
+X_service_cluster, y_service_cluster = split_xy(features_df, 'service_cluster', ['exposure', 'ui_type', 'rank'])
+service_cluster_model = train_model(X_service_cluster, y_service_cluster, "multiclass", model_config['lgbm']['service_cluster'])
+models['service_cluster'] = service_cluster_model
+
+# 4) Rank 모델 (Regression)
+print("  - Rank 모델 학습 중...")
+X_rank, y_rank = split_xy(features_df, 'rank', ['exposure', 'ui_type', 'service_cluster'])
+rank_model = train_model(X_rank, y_rank, "regression", model_config['lgbm']['rank'])
+models['rank'] = rank_model
+    
+    # 모델 저장
     import joblib
-exposure_model = joblib.load(exposure_model_path)
-ui_type_model = joblib.load(ui_type_model_path)
-service_cluster_model = joblib.load(service_cluster_model_path)
-rank_model = joblib.load(rank_model_path)
+for name, model in models.items():
+    joblib.dump(model, f'data/models/lgbm_{name}.joblib')
+
+print("모델 학습 완료")
+
+# 5. 추론 및 결과 생성
+print("\n5. 추론 및 결과 생성 중...")
+
+def get_icon_suggestion(function_id, service_cluster):
+    """아이콘 추천"""
+    icon_mapping = {
+        'account': ['account_circle', 'person', 'security'],
+        'finance': ['account_balance', 'credit_card', 'trending_up'],
+        'lifestyle': ['home', 'favorite', 'star'],
+        'health': ['favorite', 'local_hospital', 'fitness_center'],
+        'shopping': ['shopping_cart', 'store', 'local_offer'],
+        'travel': ['flight', 'train', 'directions_car'],
+        'security': ['security', 'lock', 'verified_user']
+    }
+    
+    icons = icon_mapping.get(service_cluster, ['help'])
+    return random.choice(icons)
+
+def create_ui_component_groups(functions, max_per_group=6):
+    """UI 컴포넌트 그룹 생성"""
+    groups = []
+    current_group = []
+    
+    for func in functions:
+        if len(current_group) >= max_per_group:
+            # 그룹 완성 및 저장
+            if current_group:
+                group_label = generate_group_label(current_group)
+                groups.append({
+                    "label": group_label,
+                    "functions": current_group,
+                    "component_type": "mixed",
+                    "ui_style": {
+                        "display": "flex",
+                        "flex_direction": "column",
+                        "gap": "16px",
+                        "padding": "20px"
+                    }
+                })
+            current_group = []
+        
+        current_group.append(func)
+    
+    # 마지막 그룹 처리
+    if current_group:
+        group_label = generate_group_label(current_group)
+        groups.append({
+            "label": group_label,
+            "functions": current_group,
+            "component_type": "mixed",
+            "ui_style": {
+                "display": "flex",
+                "flex_direction": "column",
+                "gap": "16px",
+                "padding": "20px"
+            }
+        })
+    
+    return groups
+
+def generate_group_label(functions):
+    """그룹 라벨 생성"""
+    # 서비스 클러스터별로 그룹화
+    cluster_counts = {}
+    for func in functions:
+        cluster = func.get('service_cluster', 'unknown')
+        cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
+    
+    # 가장 많은 클러스터를 기준으로 라벨 생성
+    if cluster_counts:
+        main_cluster = max(cluster_counts, key=cluster_counts.get)
+        cluster_label = model_config['service_clusters']['labels'].get(main_cluster, main_cluster)
+        
+        # 개인화된 라벨 생성
+        if len(functions) <= 3:
+            return f"{cluster_label} 추천"
+        else:
+            return f"{cluster_label} 모음"
+    
+    return "추천 기능"
 
 # 추론 실행
-allowed_types = ["card", "list_item", "banner", "icon"]
-results = predict_and_generate_output_colab(features_df, allowed_types)
+results = []
+
+for user_id in features_df['user_id'].unique():
+    user_features = features_df[features_df['user_id'] == user_id]
+    
+    # 예측
+    X_user = user_features.select_dtypes(include=[np.number])
+    X_user = X_user.drop(columns=['exposure', 'rank'], errors='ignore')
+    
+    exposure_pred = exposure_model.predict(X_user)
+    ui_type_pred = ui_type_model.predict(X_user)
+    service_cluster_pred = service_cluster_model.predict(X_user)
+    rank_pred = rank_model.predict(X_user)
+    
+    # 결과 생성
+    exposed_functions = []
+    
+    for i, (_, row) in enumerate(user_features.iterrows()):
+        if exposure_pred[i] == 1:  # 노출 대상
+            # 아이콘 추천
+            icon_suggestion = get_icon_suggestion(row['function_id'], row['service_cluster'])
+            
+            function_result = {
+                "function_id": row['function_id'],
+                "component_type": ui_type_pred[i],
+                "service_cluster": service_cluster_pred[i],
+                "order": rank_pred[i],
+                "icon_suggestion": icon_suggestion
+            }
+            exposed_functions.append(function_result)
+        
+        # 순서대로 정렬
+    exposed_functions.sort(key=lambda x: x['order'])
+    
+    # 그룹 생성
+    groups = create_ui_component_groups(exposed_functions)
+        
+    # 사용자별 결과
+    user_result = {
+            "user_id": user_id,
+            "home": {
+            "layout_density": "medium",
+                "groups": groups
+            }
+    }
+    
+    results.append(user_result)
+
+# 결과 저장
+with open('data/outputs/ui_home_outputs.json', 'w', encoding='utf-8') as f:
+    json.dump(results, f, ensure_ascii=False, indent=2)
+
+print(f"추론 완료: {len(results)}명 사용자")
 
 # 6. 결과 요약
-print("6. 실행 완료!")
+print("\n" + "=" * 60)
+print("Personalized UI Recommendation System 실행 완료!")
+print(f"총 사용자: {len(results)}명")
+print(f"결과 파일: data/outputs/ui_home_outputs.json")
 print("=" * 60)
-print(f"데이터: {len(events_df)}개 이벤트, {len(users_df)}명 사용자")
-print(f"피처: {len(features_df)}개 샘플, {len(features_df.columns)}개 피처")
-print(f"모델: 4개 모델 학습 완료")
-print(f"결과: {len(results)}명 사용자 홈 화면 구성 생성")
-print(f"출력: data/outputs/ui_home_outputs.json")
-print("모든 작업이 성공적으로 완료되었습니다!")
-
-# 결과 미리보기
-print("결과 미리보기:")
-if results:
-    sample_user = results[0]
-    print(f"사용자: {sample_user['user_id']}, 레이아웃: {sample_user['home']['layout_density']}, 그룹: {len(sample_user['home']['groups'])}개")
-    if sample_user['home']['groups']:
-        sample_group = sample_user['home']['groups'][0]
-        print(f"첫 번째 그룹: {sample_group['label']} ({len(sample_group['functions'])}개 기능)")
