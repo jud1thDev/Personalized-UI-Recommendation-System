@@ -4,6 +4,7 @@ import numpy as np
 import lightgbm as lgb
 from sklearn.model_selection import train_test_split
 from ..utils.io import read_yaml, ensure_dir, latest_file, save_model
+import joblib
 
 CFG_DATA = read_yaml("ui_rec/config/data.yaml")
 CFG_MODEL = read_yaml("ui_rec/config/model.yaml")
@@ -202,4 +203,49 @@ def split_xy_colab(df: pd.DataFrame, target: str, drop_cols=None):
     for col in X.select_dtypes(include=["bool"]).columns:
         X[col] = X[col].astype("int8")
     
-    return X, y 
+    return X, y
+
+
+def load_model_colab(model_path: str):
+    """Colab 환경에서 모델을 로드하는 함수"""
+    model_data = joblib.load(model_path)
+    if isinstance(model_data, dict) and 'model' in model_data:
+        return model_data['model']
+    return model_data
+
+
+def predict_exposure_colab(model_path: str, X: pd.DataFrame):
+    """노출 예측을 수행하는 함수"""
+    model = load_model_colab(model_path)
+    return model.predict(X)
+
+
+def predict_ui_type_colab(model_path: str, X: pd.DataFrame):
+    """UI 타입 예측을 수행하는 함수"""
+    model = load_model_colab(model_path)
+    return model.predict(X)
+
+
+def predict_service_cluster_colab(model_path: str, X: pd.DataFrame):
+    """서비스 클러스터 예측을 수행하는 함수"""
+    model = load_model_colab(model_path)
+    return model.predict(X)
+
+
+def predict_rank_colab(model_path: str, X: pd.DataFrame):
+    """순위 예측을 수행하는 함수"""
+    model = load_model_colab(model_path)
+    return model.predict(X)
+
+
+def predict_all_models_colab(model_dir: str, X: pd.DataFrame):
+    """모든 모델을 사용하여 예측을 수행하는 함수"""
+    results = {}
+    
+    # 각 모델별 예측 수행
+    results['exposure'] = predict_exposure_colab(f"{model_dir}/exposure.joblib", X)
+    results['ui_type'] = predict_ui_type_colab(f"{model_dir}/ui_type.joblib", X)
+    results['service_cluster'] = predict_service_cluster_colab(f"{model_dir}/service_cluster.joblib", X)
+    results['rank'] = predict_rank_colab(f"{model_dir}/rank.joblib", X)
+    
+    return results 
