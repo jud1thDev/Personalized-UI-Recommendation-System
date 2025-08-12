@@ -104,6 +104,7 @@ if __name__ == "__main__":
 
 def build_features_colab(events_path: str) -> str:
     """Colab 환경에서 사용하는 피처 생성 함수"""
+    # main 함수와 동일한 로직 사용
     df = pd.read_csv(events_path, parse_dates=["timestamp"])
     
     user_df = build_user_level(df)
@@ -124,7 +125,6 @@ def build_features_colab(events_path: str) -> str:
     feat = feat.merge(targets_subset, on=["user_id","function_id"], how="left")
 
     # Colab 환경에 맞는 경로로 저장
-    from ..utils.io import write_csv_with_timestamp
     path = write_csv_with_timestamp(feat, base_name="features", out_dir="ui_rec/data/processed")
     print(f"Saved features to {path}")
     return path 

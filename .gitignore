@@ -39,21 +39,73 @@ env/
 Thumbs.db
 desktop.ini
 
-# Project specific
-data/raw/*.csv
-data/processed/*.csv
-data/models/*.joblib
-data/outputs/*.json
-data/logs/*.log
-config/*.yaml
-config/*.yml
+# Project specific - Data files
+data/
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/models/.gitkeep
+!data/outputs/.gitkeep
+!data/logs/.gitkeep
+
+# Config files (keep only templates)
+config/
+!ui_rec/config/
+ui_rec/config/*.yaml
+ui_rec/config/*.yml
 !ui_rec/config/template.yaml
 !ui_rec/config/template.yml
 
 # Jupyter Notebook
 .ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# Jupyter Notebook outputs (cleaned by git hook)
+# *.ipynb outputs will be cleaned automatically
 
 # Temporary files
 *.tmp
 *.temp
 *.log
+
+# Model files
+*.joblib
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.pth
+*.pt
+
+# Feature files
+*.csv
+*.parquet
+*.feather
+
+# Output files
+*.json
+*.xml
+*.txt
+
+# Logs
+logs/
+*.log
+
+# Cache
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

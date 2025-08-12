@@ -21,12 +21,23 @@ except ImportError:
 
 
 class AILabelGenerator:
-    """AI 모델을 사용한 자연스러운 라벨 생성기"""
+    """AI 모델을 사용한 라벨 생성기"""
     
-    def __init__(self, model_name: str = "beomi/KcELECTRA-base"):
+    _instance = None  # 싱글톤 패턴
+    
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def __init__(self, model_name: str = "gpt2"):
+        # 싱글톤 패턴으로 중복 초기화 방지
+        if hasattr(self, 'initialized'):
+            return
+        self.initialized = True
+        
         self.model_name = model_name
         self.generator = None
-        self.fallback_generator = None
         
         if TRANSFORMERS_AVAILABLE:
             self._initialize_model()
@@ -38,7 +49,7 @@ class AILabelGenerator:
         try:
             logger.info(f"Loading AI model: {self.model_name}")
             
-            # 한국어에 특화된 모델 사용
+            # 파이프라인 생성 시 최소한의 파라미터만 사용
             self.generator = pipeline(
                 "text-generation",
                 model=self.model_name,
@@ -49,10 +60,20 @@ class AILabelGenerator:
             
         except Exception as e:
             logger.error(f"Failed to load AI model: {e}")
-            self.generator = None
+            try:
+                logger.info("Trying fallback model...")
+                self.generator = pipeline(
+                    "text-generation",
+                    model="gpt2",  
+                    device=0 if torch.cuda.is_available() else -1
+                )
+                logger.info("Fallback model loaded successfully!")
+            except Exception as e2:
+                logger.error(f"Fallback model also failed: {e2}")
+                self.generator = None
     
     def generate_label(self, functions: List[Dict], cluster: str) -> str:
-        """AI 모델을 사용해서 자연스러운 라벨 생성"""
+        """AI 모델을 사용해서 라벨 생성"""
         
         if self.generator and self._should_use_ai(functions):
             try:
@@ -78,23 +99,30 @@ class AILabelGenerator:
         # 프롬프트 구성
         prompt = self._create_prompt(function_names, service_cluster)
         
-        # AI 모델로 생성
-        response = self.generator(
-            prompt,
-            max_length=50,
-            num_return_sequences=1,
-            temperature=0.7,
-            do_sample=True
-        )
-        
-        # 응답에서 라벨 추출
-        generated_text = response[0]['generated_text']
-        label = self._extract_label_from_response(generated_text, prompt)
-        
-        return label
+        # AI 모델로 생성 - 최소한의 파라미터만 사용
+        try:
+            response = self.generator(
+                prompt,
+                max_new_tokens=15,  # max_length 제거, max_new_tokens만 사용
+                num_return_sequences=1,
+                temperature=0.7,
+                do_sample=True,
+                truncation=True,
+                pad_token_id=self.generator.tokenizer.eos_token_id
+            )
+            
+            # 응답에서 라벨 추출
+            generated_text = response[0]['generated_text']
+            label = self._extract_label_from_response(generated_text, prompt)
+            
+            return label
+            
+        except Exception as e:
+            logger.error(f"AI generation error: {e}")
+            return self._generate_fallback(functions, cluster)
     
     def _create_prompt(self, function_names: List[str], cluster: str) -> str:
-        """AI 모델용 프롬프트 생성"""
+        """AI 모델용 프롬프트 생성""
         
         prompt = f"""다음 기능들을 포함하는 그룹의 자연스러운 한글 제목을 생성해주세요.
 
@@ -148,7 +176,7 @@ class AILabelGenerator:
 
 
 def create_ai_label_generator() -> AILabelGenerator:
-    """AI 라벨 생성기 인스턴스 생성"""
+    """AI 라벨 생성기 인스턴스 생성 (싱글톤)"""
     return AILabelGenerator()
 
 

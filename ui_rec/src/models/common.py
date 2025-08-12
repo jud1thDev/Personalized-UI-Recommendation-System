@@ -6,11 +6,40 @@ from sklearn.model_selection import train_test_split
 from ..utils.io import read_yaml, ensure_dir, latest_file, save_model
 import joblib
 
-CFG_DATA = read_yaml("ui_rec/config/data.yaml")
-CFG_MODEL = read_yaml("ui_rec/config/model.yaml")
+# 코랩과 로컬 환경 모두 지원
+try:
+    CFG_DATA = read_yaml("ui_rec/config/data.yaml")
+    CFG_MODEL = read_yaml("ui_rec/config/model.yaml")
+except FileNotFoundError:
+    # 코랩 환경에서 상대 경로로 시도
+    try:
+        CFG_DATA = read_yaml("config/data.yaml")
+        CFG_MODEL = read_yaml("config/model.yaml")
+    except FileNotFoundError:
+        # 기본값 사용
+        CFG_DATA = {
+            "paths": {
+                "processed_dir": "data/processed",
+                "models_dir": "data/models"
+            },
+            "files": {
+                "features_pattern": "features_*.csv"
+            }
+        }
+        CFG_MODEL = {
+            "lgbm": {
+                "exposure": {"objective": "binary", "metric": "auc"},
+                "ui_type": {"objective": "multiclass", "metric": "multi_logloss"},
+                "service_cluster": {"objective": "multiclass", "metric": "multi_logloss"},
+                "rank": {"objective": "regression", "metric": "rmse"}
+            }
+        }
+
 PROC_DIR = CFG_DATA["paths"]["processed_dir"]
 MODELS_DIR = CFG_DATA["paths"]["models_dir"]
 
+# 학습/추론에서 항상 제거할 컬럼
+ALWAYS_DROP = ["user_id", "function_id"]
 
 def load_latest_features() -> pd.DataFrame:
     path = latest_file(CFG_DATA["files"]["features_pattern"], PROC_DIR)
@@ -19,63 +48,88 @@ def load_latest_features() -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def _encode_types(X: pd.DataFrame, categorical_cols=None, boolean_cols=None) -> pd.DataFrame:
+    """object/category -> codes, bool -> int8"""
+    X = X.copy()
+
+    # 명시된 카테고리 컬럼 우선 적용, 아니면 dtype 기반 자동 탐지
+    if categorical_cols is None:
+        categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
+    for c in categorical_cols:
+        if c in X.columns:
+            X[c] = X[c].astype("category").cat.codes
+
+    # 이미 category dtype인 것들도 codes로
+    for c in X.select_dtypes(include=["category"]).columns:
+        X[c] = X[c].cat.codes
+
+    # 불린 컬럼
+    if boolean_cols is None:
+        boolean_cols = X.select_dtypes(include=["bool"]).columns.tolist()
+    for c in boolean_cols:
+        if c in X.columns:
+            X[c] = X[c].astype("int8")
+
+    return X
+
+
 def split_xy(df: pd.DataFrame, target: str, drop_cols=None):
+    """학습용 분리: ID/타겟/추가 drop 제외 + 타입 인코딩"""
     if drop_cols is None:
         drop_cols = []
-    X = df.drop(columns=[target] + drop_cols)
-    
-    # 모든 object 컬럼을 범주형 코드로 변환
-    for col in X.select_dtypes(include=["object"]).columns:
-        X[col] = X[col].astype("category").cat.codes
-    
-    # bool은 정수로 변환
-    bool_cols = X.select_dtypes(include=["bool"]).columns.tolist()
-    for col in bool_cols:
-        X[col] = X[col].astype("int8")
-    
-    # category 컬럼을 정수로 변환
-    for col in X.select_dtypes(include=["category"]).columns:
-        X[col] = X[col].cat.codes
-    
+    drop_cols = list(set(drop_cols + ALWAYS_DROP + [target]))
+
+    X = df.drop(columns=drop_cols)
+    X = _encode_types(X)
+
     y = df[target]
-    
-    # 타겟 변수가 문자열인 경우 숫자로 인코딩
     if y.dtype == "object":
         y = y.astype("category").cat.codes
-    
     return X, y
 
 
 def get_feature_mapping(df: pd.DataFrame, target: str, drop_cols=None):
-    """피처 매핑 정보를 반환하여 추론 시 동일한 전처리 적용"""
+    """학습 시 저장할 매핑(열 순서/타입 정보)"""
     if drop_cols is None:
         drop_cols = []
-    X = df.drop(columns=[target] + drop_cols)
-    
+    drop_cols = list(set(drop_cols + ALWAYS_DROP + [target]))
+
+    X = df.drop(columns=drop_cols)
     mapping = {
-        'categorical_columns': X.select_dtypes(include=["object"]).columns.tolist(),
-        'boolean_columns': X.select_dtypes(include=["bool"]).columns.tolist(),
-        'column_order': X.columns.tolist(),
-        'feature_count': len(X.columns)
+        "categorical_columns": X.select_dtypes(include=["object"]).columns.tolist(),
+        "boolean_columns": X.select_dtypes(include=["bool"]).columns.tolist(),
+        "column_order": X.columns.tolist(),
+        "feature_count": X.shape[1],
     }
-    
     return mapping
 
 
+def align_features_with_mapping(X: pd.DataFrame, mapping: dict) -> pd.DataFrame:
+    """추론 시 학습과 동일한 열/타입 정렬"""
+    X2 = X.copy()
+
+    # 누락된 열 0으로 채우기
+    for col in mapping["column_order"]:
+        if col not in X2.columns:
+            X2[col] = 0
+
+    # 여분 열 제거 + 순서 강제
+    X2 = X2[mapping["column_order"]]
+
+    # 타입 인코딩 동일 적용
+    X2 = _encode_types(X2, mapping["categorical_columns"], mapping["boolean_columns"])
+    return X2
+
+
 def apply_feature_mapping(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
-    """저장된 피처 매핑을 사용하여 동일한 전처리 적용"""
+    """(이전 호환용) 저장된 매핑 기반으로 열 정렬 + 기본 타입 설정"""
     X = df[mapping['column_order']].copy()
-    
-    # 범주형 변환
     for col in mapping['categorical_columns']:
         if col in X.columns:
             X[col] = X[col].astype("category")
-    
-    # 불린 변환
     for col in mapping['boolean_columns']:
         if col in X.columns:
             X[col] = X[col].astype("int8")
-    
     return X
 
 
@@ -186,77 +240,63 @@ def train_regression(df: pd.DataFrame, target: str, model_name: str) -> str:
 
 
 def split_xy_colab(df: pd.DataFrame, target: str, drop_cols=None):
-    """Colab 환경에서 사용하는 데이터 분할 함수"""
+    """Colab에서 간편 사용: ID 자동 제거 + 인코딩"""
     if drop_cols is None:
         drop_cols = []
-    
-    # 타겟 컬럼과 제거할 컬럼들을 제외한 피처 데이터
-    feature_cols = [col for col in df.columns if col not in [target] + drop_cols]
+    drop_cols = list(set(drop_cols + ALWAYS_DROP + [target]))
+
+    feature_cols = [c for c in df.columns if c not in drop_cols]
     X = df[feature_cols].copy()
     y = df[target].copy()
-    
-    # 범주형 변수 인코딩
-    for col in X.select_dtypes(include=["object"]).columns:
-        X[col] = X[col].astype("category").cat.codes
-    
-    # bool은 정수로 변환
-    for col in X.select_dtypes(include=["bool"]).columns:
-        X[col] = X[col].astype("int8")
-    
+
+    X = _encode_types(X)
     return X, y
 
 
 def load_model_colab(model_path: str):
-    """Colab 환경에서 모델을 로드하는 함수"""
+    """(이전 호환용) 모델만 꺼내기"""
     model_data = joblib.load(model_path)
     if isinstance(model_data, dict) and 'model' in model_data:
         return model_data['model']
     return model_data
 
 
+def load_model_and_mapping(path: str):
+    data = joblib.load(path)
+    if isinstance(data, dict) and "model" in data:
+        return data["model"], data.get("feature_mapping")
+    return data, None
+
+
+def _predict_with_mapping(model_path: str, X: pd.DataFrame):
+    model, mapping = load_model_and_mapping(model_path)
+    if mapping is not None:
+        Xa = align_features_with_mapping(X, mapping)
+    else:
+        Xa = _encode_types(X)  
+    return model.predict(Xa)
+
+
 def predict_exposure_colab(model_path: str, X: pd.DataFrame):
-    """노출 예측을 수행하는 함수"""
-    model = load_model_colab(model_path)
-    return model.predict(X)
+    return _predict_with_mapping(model_path, X)
 
 
 def predict_ui_type_colab(model_path: str, X: pd.DataFrame):
-    """UI 타입 예측을 수행하는 함수"""
-    model = load_model_colab(model_path)
-    return model.predict(X)
+    return _predict_with_mapping(model_path, X)
 
 
 def predict_service_cluster_colab(model_path: str, X: pd.DataFrame):
-    """서비스 클러스터 예측을 수행하는 함수"""
-    model = load_model_colab(model_path)
-    return model.predict(X)
+    return _predict_with_mapping(model_path, X)
 
 
 def predict_rank_colab(model_path: str, X: pd.DataFrame):
-    """순위 예측을 수행하는 함수"""
-    model = load_model_colab(model_path)
-    return model.predict(X)
+    return _predict_with_mapping(model_path, X)
 
 
 def predict_all_models_colab(model_dir: str, X: pd.DataFrame):
-    """모든 모델을 사용하여 예측을 수행하는 함수"""
-    # 예측 전에 범주형 변수 인코딩
-    X_encoded = X.copy()
-    
-    # 범주형 변수 인코딩
-    for col in X_encoded.select_dtypes(include=["object"]).columns:
-        X_encoded[col] = X_encoded[col].astype("category").cat.codes
-    
-    # bool은 정수로 변환
-    for col in X_encoded.select_dtypes(include=["bool"]).columns:
-        X_encoded[col] = X_encoded[col].astype("int8")
-    
-    results = {}
-    
-    # 각 모델별 예측 수행
-    results['exposure'] = predict_exposure_colab(f"{model_dir}/exposure.joblib", X_encoded)
-    results['ui_type'] = predict_ui_type_colab(f"{model_dir}/ui_type.joblib", X_encoded)
-    results['service_cluster'] = predict_service_cluster_colab(f"{model_dir}/service_cluster.joblib", X_encoded)
-    results['rank'] = predict_rank_colab(f"{model_dir}/rank.joblib", X_encoded)
-    
-    return results 
+    return {
+        "exposure":        predict_exposure_colab(os.path.join(model_dir, "exposure.joblib"), X),
+        "ui_type":         predict_ui_type_colab(os.path.join(model_dir, "ui_type.joblib"), X),
+        "service_cluster": predict_service_cluster_colab(os.path.join(model_dir, "service_cluster.joblib"), X),
+        "rank":            predict_rank_colab(os.path.join(model_dir, "rank.joblib"), X),
+    } 

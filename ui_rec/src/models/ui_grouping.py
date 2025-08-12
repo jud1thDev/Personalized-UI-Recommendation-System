@@ -24,6 +24,15 @@ def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> Li
             component_groups[comp_type] = []
         component_groups[comp_type].append(func)
     
+    # AI 라벨 생성기를 한 번만 생성 (싱글톤 패턴으로 중복 방지)
+    ai_generator = None
+    try:
+        from ..utils.ai_label_generator import create_ai_label_generator
+        ai_generator = create_ai_label_generator()
+    except Exception as e:
+        print(f"AI label generator initialization failed: {e}")
+        ai_generator = None
+    
     # 각 컴포넌트 타입별로 그룹 생성
     groups = []
     for comp_type, funcs in component_groups.items():
@@ -31,11 +40,15 @@ def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> Li
             continue
             
         # AI 기반 라벨 생성 (3개 이상 기능)
-        if len(funcs) >= 3:
-            label = generate_ai_label(funcs, comp_type)
+        if len(funcs) >= 3 and ai_generator:
+            try:
+                label = ai_generator.generate_label(funcs, comp_type)
+            except Exception as e:
+                print(f"AI label generation failed for {comp_type}: {e}")
+                label = generate_simple_label(funcs, comp_type, user_name)
         else:
             # 1-2개 기능은 추천 기능 그룹
-            label = f"{user_name}님의 추천 기능" if user_name else "추천 기능"
+            label = generate_simple_label(funcs, comp_type, user_name)
         
         groups.append({
             "label": label,
@@ -50,19 +63,30 @@ def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> Li
         # 기능 개수로 2-3개 그룹으로 분할
         mid_point = len(functions) // 2
         
+        # AI 라벨 생성 시도
+        label1 = "추천 기능"
+        label2 = "추천 기능"
+        
+        if ai_generator:
+            try:
+                label1 = ai_generator.generate_label(functions[:mid_point], "mixed")
+                label2 = ai_generator.generate_label(functions[mid_point:], "mixed")
+            except Exception as e:
+                print(f"AI label generation for split groups failed: {e}")
+        
         return [
             {
-                "label": generate_ai_label(functions[:mid_point], "mixed"),
+                "label": label1,
                 "functions": functions[:mid_point],
                 "component_type": "mixed",
-                "function_count": len(functions[:mid_point]),  # 기능 개수 추가
+                "function_count": len(functions[:mid_point]),
                 "ui_style": get_ui_component_style("mixed")
             },
             {
-                "label": generate_ai_label(functions[mid_point:], "mixed"),
+                "label": label2,
                 "functions": functions[mid_point:],
                 "component_type": "mixed",
-                "function_count": len(functions[mid_point:]),  # 기능 개수 추가
+                "function_count": len(functions[mid_point:]),
                 "ui_style": get_ui_component_style("mixed")
             }
         ]
@@ -70,8 +94,8 @@ def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> Li
     return groups
 
 
-def generate_ai_label(functions: List[Dict], component_type: str) -> str:
-    """Hugging Face AI 모델을 사용해서 라벨 생성"""
+def generate_simple_label(functions: List[Dict], component_type: str, user_name: str = "") -> str:
+    """간단한 라벨 생성 (AI 실패 시 fallback)"""
     
     # 서비스 클러스터 분석
     cluster_counts = Counter()
@@ -82,20 +106,12 @@ def generate_ai_label(functions: List[Dict], component_type: str) -> str:
     # 주요 서비스 클러스터 파악
     if cluster_counts:
         main_cluster = cluster_counts.most_common(1)[0][0]
-        
-        # AI 기반 라벨 생성
-        try:
-            from ..utils.ai_label_generator import create_ai_label_generator
-            ai_generator = create_ai_label_generator()
-            return ai_generator.generate_label(functions, main_cluster)
-        except Exception as e:
-            # AI 생성 실패 시 간단한 fallback
-            return get_simple_fallback_label(main_cluster)
+        return get_simple_fallback_label(main_cluster, user_name)
     
-    return "추천 기능"
+    return f"{user_name}님의 추천 기능" if user_name else "추천 기능"
 
 
-def get_simple_fallback_label(cluster: str) -> str:
+def get_simple_fallback_label(cluster: str, user_name: str = "") -> str:
     """AI 생성 실패 시 간단한 fallback 라벨"""
     simple_labels = {
         "account": "계정",
@@ -107,7 +123,9 @@ def get_simple_fallback_label(cluster: str) -> str:
         "security": "보안",
         "unknown": "기타"
     }
-    return simple_labels.get(cluster, cluster)
+    
+    base_label = simple_labels.get(cluster, cluster)
+    return f"{user_name}님의 {base_label}" if user_name else base_label
 
 
 def get_ui_component_style(component_type: str) -> Dict[str, str]:
