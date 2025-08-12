@@ -1,7 +1,7 @@
 # Personalized UI Recommendation System
 
 ## 개요
-다양한 연령대(시니어 포함)의 사용자 행동 로그를 기반으로 홈 화면을 개인화하는 AI 시스템
+사용자 행동 로그를 기반으로 홈 화면을 개인화하는 AI 시스템
 
 ## 주요 기능
 1. **기능 노출 여부 예측** - 사용자가 실제로 사용할 기능만 표시
@@ -33,20 +33,32 @@ Personalized-UI-Recommendation-System/
 
 ## Google Colab에서 실행
 
-### 1. 프로젝트 업로드
-1. **GitHub에서 다운로드**
-   ```bash
-   !git clone https://github.com/jud1thDev/Personalized-UI-Recommendation-System.git
-   ```
+### **1. Google Colab 접속**
+1. [Google Colab](https://colab.research.google.com/) 접속
+2. Google 계정으로 로그인
 
-2. **Google Colab에서 파일 업로드**
-   - `colab_main.ipynb` 파일을 Google Colab에 업로드
-   - 또는 GitHub 저장소를 직접 연결
+### **2. 프로젝트 파일 업로드**
+1. Colab에서 `파일` → `GitHub에서 노트북 가져오기` 클릭
+2. 저장소 URL 입력: `jud1thDev/Personalized-UI-Recommendation-System`
+3. `colab_main.ipynb` 선택
 
-### 2. 실행 
-노트북의 각 셀을 **순서대로** 실행
+### **3.  실행 환경 설정**
+1. **런타임 유형 변경**: `런타임` → `런타임 유형 변경`
+   - 하드웨어 가속기: `GPU` 또는 `TPU` 선택 (권장)
+   - 메모리: `고용량 RAM` 선택
 
-### 3. 결과 확인
-- **자동 다운로드**: `ui_home_outputs.json` 파일이 자동으로 다운로드됨
-- **파일 위치**: `ui_rec/data/outputs/ui_home_outputs.json`
-- **내용**: 각 사용자별 개인화된 홈 화면 구성
+### **4. 노트북 실행**
+각 셀을 순서대로 실행
+
+### **5. 실행 완료 확인**
+모든 셀이 성공적으로 실행되면 `ui_home_outputs.json` 파일이 자동으로 다운로드됨
+
+## 실행 단계 요약
+1. **환경 설정** 
+2. **모듈 import** 
+3. **설정 파일 생성**
+4. **데이터 생성**
+5. **피처 생성**
+6. **모델 학습** 
+7. **추론 및 그룹화** 
+8. **결과 저장**
