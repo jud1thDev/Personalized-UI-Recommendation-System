@@ -102,21 +102,22 @@ def generate_functions(n_functions: int = 50) -> pd.DataFrame:
     return pd.DataFrame(functions, columns=["function_id", "service_cluster", "title", "subtitle"])
 
 def simulate_events(users: pd.DataFrame, funcs: pd.DataFrame, days: int = 30) -> pd.DataFrame:
-    # 일반 사용자 컴포넌트 타입
+    # 일반 사용자 컴포넌트 타입 (기능 개수 제한 명시)
     component_types_normal = [
-        "list_single",  # 국민은행 기존 홈 기준: 나의 총자산 // 1개
+        "list_single",  # 국민은행 기존 홈 기준: 나의 총자산 // 1개만
         "list_multi",   # 국민은행 기존 홈 기준: 이번 주 카드결제,오늘한 지출 // 2~5개
         "grid_multi",   # 국민은행 기존 홈 기준: 오늘 걸음, 용돈 받기 // 2~4개
-        "grid_full",    # 국민은행 기존 홈 기준: 미리 챙겨주면 좋은 청년 혜택들 // 1개
-        "banner"       # 국민은행 기존 홈 기준: 추천 서비스 // 3~4개
+        "grid_full",    # 국민은행 기존 홈 기준: 미리 챙겨주면 좋은 청년 혜택들 // 1개만
+        "banner"        # 국민은행 기존 홈 기준: 추천 서비스 // 3~4개
     ]
 
-    # 시니어 사용자 컴포넌트 타입
+    # 시니어 사용자 컴포넌트 타입 (기능 개수 제한 명시)
     component_types_senior = [
-        "s_list_single", # 국민은행 기존 홈 기준: 모든 게 다 이 컴포넌트 // 1개
+        "s_list_single", # 국민은행 기존 홈 기준: 모든 게 다 이 컴포넌트 // 1개만
         "s_list_multi", # 국민은행 기존 홈 기준: 모든 게 다 이 컴포넌트 // 2~5개
-        "s_grid_multi", # 기존엔 없던 컴포넌트, 일반 사용자용 컴포넌트를 살짝 변형하여 정의 // 2개
-        "s_grid_full", # 기존엔 없던 컴포넌트, 일반 사용자용 컴포넌트를 살짝 변형하여 정의 // 1개
+        "s_grid_multi", # 기존엔 없던 컴포넌트, 일반 사용자용 컴포넌트를 살짝 변형하여 정의 // 2~4개
+        "s_grid_full",  # 기존엔 없던 컴포넌트, 일반 사용자용 컴포넌트를 살짝 변형하여 정의 // 1개만
+        "banner"        # 시니어용 배너 // 3~4개
     ]
 
     # 환율·증시 전용 컴포넌트
@@ -141,9 +142,17 @@ def simulate_events(users: pd.DataFrame, funcs: pd.DataFrame, days: int = 30) ->
                     
                     # 사용자 타입에 따른 컴포넌트 타입 선택
                     if u.is_senior:
-                        component_type = np.random.choice(component_types_senior)
+                        # 시니어: 단순하고 큰 컴포넌트 선호
+                        if np.random.rand() < 0.6:  # 60% 확률로 list 타입
+                            component_type = np.random.choice(["s_list_single", "s_list_multi"])
+                        else:
+                            component_type = np.random.choice(["s_grid_multi", "s_grid_full", "banner"])
                     else:
-                        component_type = np.random.choice(component_types_normal)
+                        # 일반 사용자: 다양하고 세밀한 컴포넌트 선호
+                        if np.random.rand() < 0.4:  # 40% 확률로 list 타입
+                            component_type = np.random.choice(["list_single", "list_multi"])
+                        else:
+                            component_type = np.random.choice(["grid_multi", "grid_full", "banner"])
                     
                     component_id = f"cmp-{f.function_id}-{np.random.randint(1000):04d}"
                     position = np.random.randint(1, 50)

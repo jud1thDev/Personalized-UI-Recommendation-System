@@ -70,6 +70,7 @@ class AILabelGenerator:
                 logger.info("Fallback model loaded successfully!")
             except Exception as e2:
                 logger.error(f"Fallback model also failed: {e2}")
+                logger.info("Will use rule-based label generation instead.")
                 self.generator = None
     
     def generate_label(self, functions: List[Dict], cluster: str) -> str:
@@ -77,11 +78,14 @@ class AILabelGenerator:
         
         if self.generator and self._should_use_ai(functions):
             try:
+                logger.info(f"Attempting AI label generation for {len(functions)} functions")
                 return self._generate_with_ai(functions, cluster)
             except Exception as e:
                 logger.warning(f"AI generation failed: {e}, using fallback")
+                logger.info("Falling back to rule-based label generation")
         
         # AI 생성 실패 시 fallback 사용
+        logger.info("Using rule-based label generation")
         return self._generate_fallback(functions, cluster)
     
     def _should_use_ai(self, functions: List[Dict]) -> bool:
@@ -130,7 +134,7 @@ class AILabelGenerator:
 서비스 영역: {cluster}
 
 제목은 다음 조건을 만족해야 합니다:
-1. 2-6글자로 간결하게
+1. 3-7글자로 적당한 길이로
 2. 사용자가 직관적으로 이해할 수 있게
 3. '~관리', '~서비스' 같은 형식적 표현 피하기
 4. 자연스러운 한국어로
@@ -151,27 +155,83 @@ class AILabelGenerator:
         # 특수문자 제거
         label = label.replace('"', '').replace("'", "")
         
-        # 길이 제한 
-        if len(label) > 6:
-            label = label[:6]
+        # 길이 제한 (3-7글자)
+        if len(label) < 3:
+            label = "추천 기능"
+        elif len(label) > 7:
+            label = label[:7]
         
         return label if label else "추천 기능"
     
     def _generate_fallback(self, functions: List[Dict], cluster: str) -> str:
         """AI 생성 실패 시 fallback 라벨 생성"""
         
-        # fallback 라벨 (KB스타뱅킹 앱 기준)
+        # 기능명에서 한글 키워드 추출하여 라벨 생성
+        if functions:
+            # 기능명에서 의미있는 한글 키워드 찾기
+            function_names = [func.get('function_id', '') for func in functions]
+            
+            # 한글 키워드 매핑 (KB스타뱅킹 앱 기준)
+            korean_keywords = {
+                # 계정 관련
+                "account": "계정 관리", "login": "로그인", "register": "회원가입", "profile": "프로필",
+                "password": "비밀번호", "security": "보안 설정", "verify": "본인인증",
+                
+                # 금융 관련  
+                "transfer": "계좌이체", "payment": "결제하기", "loan": "대출신청", "investment": "투자상품",
+                "savings": "적금상품", "deposit": "예금상품", "exchange": "환전하기", "card": "카드서비스",
+                "insurance": "보험상품", "pension": "연금상품", "fund": "펀드상품",
+                
+                # 생활 관련
+                "lifestyle": "생활서비스", "utility": "공과금납부", "tax": "세금납부", "mobile": "휴대폰결제",
+                "transport": "교통카드", "parking": "주차서비스", "toll": "통행료납부",
+                
+                # 건강 관련
+                "health": "건강관리", "medical": "의료서비스", "pharmacy": "약국서비스", "fitness": "운동관리",
+                "diet": "식단관리", "sleep": "수면관리",
+                
+                # 쇼핑 관련
+                "shopping": "쇼핑몰", "mall": "쇼핑센터", "coupon": "쿠폰서비스", "discount": "할인혜택",
+                "delivery": "배송조회", "refund": "환불신청", "review": "리뷰작성",
+                
+                # 여행 관련
+                "travel": "여행서비스", "hotel": "호텔예약", "flight": "항공예약", "rental": "렌트서비스",
+                "tour": "투어상품", "booking": "예약서비스", "reservation": "예약관리",
+                
+                # 기타
+                "notification": "알림설정", "setting": "설정메뉴", "help": "도움말", "info": "정보안내",
+                "search": "검색서비스", "favorite": "즐겨찾기", "history": "이용내역"
+            }
+            
+            # 기능명에서 한글 키워드 찾기
+            found_keywords = []
+            for name in function_names:
+                name_lower = name.lower()
+                for eng, kor in korean_keywords.items():
+                    if eng in name_lower:
+                        found_keywords.append(kor)
+                        break
+            
+            if found_keywords:
+                # 가장 많이 나타나는 키워드 선택
+                from collections import Counter
+                keyword_counts = Counter(found_keywords)
+                most_common = keyword_counts.most_common(1)[0][0]
+                return most_common
+        
+        # 서비스 클러스터 기반 fallback 라벨 (KB스타뱅킹 앱 기준)
         fallback_labels = {
-            "lifestyle": "생활",
-            "finance": "금융", 
-            "account": "계정",
-            "health": "건강",
-            "shopping": "쇼핑",
-            "travel": "여행",
-            "security": "보안"
+            "lifestyle": "생활서비스",
+            "finance": "금융서비스", 
+            "account": "계정관리",
+            "health": "건강관리",
+            "shopping": "쇼핑서비스",
+            "travel": "여행서비스",
+            "security": "보안설정",
+            "default": "추천기능"
         }
         
-        return fallback_labels.get(cluster, cluster)
+        return fallback_labels.get(cluster, fallback_labels["default"])
 
 
 def create_ai_label_generator() -> AILabelGenerator:
