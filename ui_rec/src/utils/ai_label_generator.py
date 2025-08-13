@@ -122,7 +122,7 @@ class AILabelGenerator:
             return self._generate_fallback(functions, cluster)
     
     def _create_prompt(self, function_names: List[str], cluster: str) -> str:
-        """AI 모델용 프롬프트 생성""
+        """AI 모델용 프롬프트 생성"""
         
         prompt = f"""다음 기능들을 포함하는 그룹의 자연스러운 한글 제목을 생성해주세요.
 
@@ -151,26 +151,29 @@ class AILabelGenerator:
         # 특수문자 제거
         label = label.replace('"', '').replace("'", "")
         
-        # 길이 제한
-        if len(label) > 10:
-            label = label[:10]
+        # 길이 제한 
+        if len(label) > 6:
+            label = label[:6]
         
         return label if label else "추천 기능"
     
     def _generate_fallback(self, functions: List[Dict], cluster: str) -> str:
         """AI 생성 실패 시 fallback 라벨 생성"""
         
-        # 간단한 rule-based 라벨 생성
+        # fallback 라벨 (KB스타뱅킹 앱 기준)
         fallback_labels = {
-            "account": ["계정", "내 정보", "프로필"],
-            "finance": ["금융", "자산", "내 돈"],
-            "lifestyle": ["생활", "편의", "일상"],
-            "health": ["건강", "웰빙", "건강관리"],
-            "shopping": ["쇼핑", "구매", "상품"],
-            "travel": ["여행", "교통", "이동"],
-            "security": ["보안", "안전", "보호"]
+            "가입상품관리": ["상품", "가입", "관리"],
+            "자산관리": ["내 자산", "자산 관리"],
+            "공과금": ["공과금", "요금 납부"],
+            "외환": ["외환/환전"],
+            "금융편의": ["금융편의"],
+            "혜택": ["혜택"],
+            "생활/제휴": ["생활/제휴"],
+            "테마별서비스": ["테마별서비스"],
+            "사장님+": ["사장님+"]
         }
         
+        # 클러스터에 맞는 라벨 찾기
         labels = fallback_labels.get(cluster, [cluster])
         return labels[0] if labels else cluster
 
@@ -178,17 +181,3 @@ class AILabelGenerator:
 def create_ai_label_generator() -> AILabelGenerator:
     """AI 라벨 생성기 인스턴스 생성 (싱글톤)"""
     return AILabelGenerator()
-
-
-# 사용 예시
-if __name__ == "__main__":
-    generator = create_ai_label_generator()
-    
-    # 테스트
-    test_functions = [
-        {"function_id": "f001", "service_cluster": "account"},
-        {"function_id": "f002", "service_cluster": "account"}
-    ]
-    
-    label = generator.generate_label(test_functions, "account")
-    print(f"Generated label: {label}")
