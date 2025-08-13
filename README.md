@@ -5,7 +5,10 @@
 
 ## 주요 기능
 1. **기능 노출 여부 예측** - 사용자가 실제로 사용할 기능만 표시
-2. **UI 유형 예측** - card, list_item, banner, icon 등 최적의 컴포넌트 타입 선택
+2. **UI 유형 예측** - 사용자 타입(일반/시니어)에 따른 최적의 컴포넌트 타입 선택
+   - **일반 사용자**: list_single, list_multi, grid_multi, grid_full, banner
+   - **시니어 사용자**: s_list_single, s_list_multi, s_grid_multi, s_grid_full
+   - **공통**: exchange_stock_widget (환율·증시)
 3. **기능 그룹 및 레이블 예측** - 서비스 클러스터와 소제목 자동 생성
 4. **홈 화면 최적화** - 정보 밀도, 배치 순서, 레이아웃 자동 조정
 
