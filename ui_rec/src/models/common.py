@@ -29,7 +29,6 @@ except FileNotFoundError:
         CFG_MODEL = {
             "lgbm": {
                 "exposure": {"objective": "binary", "metric": "auc"},
-                "ui_type": {"objective": "multiclass", "metric": "multi_logloss"},
                 "service_cluster": {"objective": "multiclass", "metric": "multi_logloss"},
                 "rank": {"objective": "regression", "metric": "rmse"}
             }
@@ -135,7 +134,7 @@ def apply_feature_mapping(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
 
 def train_binary(df: pd.DataFrame, target: str, model_name: str) -> str:
     params = CFG_MODEL["lgbm"]["exposure"].copy()
-    drop_cols = ["ui_type_label","service_cluster_label","rank_label"]
+    drop_cols = ["service_cluster_label","rank_label"]
     X, y = split_xy(df, target, drop_cols)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
@@ -172,7 +171,7 @@ def train_multiclass(df: pd.DataFrame, target: str, model_key: str, model_name: 
     classes = df[target].astype("category").cat.categories.tolist()
     params["num_class"] = len(classes)
 
-    drop_cols = ["exposure_label","rank_label","ui_type_label","service_cluster_label"]
+    drop_cols = ["exposure_label","rank_label","service_cluster_label"]
     X, y = split_xy(df, target, drop_cols)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
@@ -207,7 +206,7 @@ def train_multiclass(df: pd.DataFrame, target: str, model_key: str, model_name: 
 
 def train_regression(df: pd.DataFrame, target: str, model_name: str) -> str:
     params = CFG_MODEL["lgbm"]["rank"].copy()
-    drop_cols = ["exposure_label","ui_type_label","service_cluster_label","rank_label"]
+    drop_cols = ["exposure_label","service_cluster_label","rank_label"]
     X, y = split_xy(df, target, drop_cols)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
@@ -281,8 +280,7 @@ def predict_exposure_colab(model_path: str, X: pd.DataFrame):
     return _predict_with_mapping(model_path, X)
 
 
-def predict_ui_type_colab(model_path: str, X: pd.DataFrame):
-    return _predict_with_mapping(model_path, X)
+
 
 
 def predict_service_cluster_colab(model_path: str, X: pd.DataFrame):
@@ -296,7 +294,6 @@ def predict_rank_colab(model_path: str, X: pd.DataFrame):
 def predict_all_models_colab(model_dir: str, X: pd.DataFrame):
     return {
         "exposure":        predict_exposure_colab(os.path.join(model_dir, "exposure.joblib"), X),
-        "ui_type":         predict_ui_type_colab(os.path.join(model_dir, "ui_type.joblib"), X),
         "service_cluster": predict_service_cluster_colab(os.path.join(model_dir, "service_cluster.joblib"), X),
         "rank":            predict_rank_colab(os.path.join(model_dir, "rank.joblib"), X),
     } 

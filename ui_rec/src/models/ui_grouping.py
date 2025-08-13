@@ -42,7 +42,9 @@ def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> Li
         # AI 기반 라벨 생성 (3개 이상 기능)
         if len(funcs) >= 3 and ai_generator:
             try:
-                label = ai_generator.generate_label(funcs, comp_type)
+                # 서비스 클러스터 정보 추출
+                service_cluster = funcs[0].get("service_cluster", "unknown")
+                label = ai_generator.generate_label(funcs, service_cluster)
             except Exception as e:
                 print(f"AI label generation failed for {comp_type}: {e}")
                 label = generate_simple_label(funcs, comp_type, user_name)
@@ -50,9 +52,16 @@ def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> Li
             # 1-2개 기능은 추천 기능 그룹
             label = generate_simple_label(funcs, comp_type, user_name)
         
+        # JSON 표시 시 중복 데이터 제거 (user_id, is_senior)
+        clean_funcs = []
+        for func in funcs:
+            clean_func = {k: v for k, v in func.items() 
+                         if k not in ['user_id', 'is_senior']}
+            clean_funcs.append(clean_func)
+        
         groups.append({
             "label": label,
-            "functions": funcs,
+            "functions": clean_funcs,
             "component_type": comp_type,
             "function_count": len(funcs),
             "ui_style": get_ui_component_style(comp_type)
@@ -69,22 +78,38 @@ def create_ui_component_groups(functions: List[Dict], user_name: str = "") -> Li
         
         if ai_generator:
             try:
-                label1 = ai_generator.generate_label(functions[:mid_point], "mixed")
-                label2 = ai_generator.generate_label(functions[mid_point:], "mixed")
+                service_cluster1 = functions[0].get("service_cluster", "unknown")
+                service_cluster2 = functions[mid_point].get("service_cluster", "unknown")
+                label1 = ai_generator.generate_label(functions[:mid_point], service_cluster1)
+                label2 = ai_generator.generate_label(functions[mid_point:], service_cluster2)
             except Exception as e:
                 print(f"AI label generation for split groups failed: {e}")
+        
+        # JSON 표시 시 중복 데이터 제거 (user_id, is_senior)
+        clean_functions1 = []
+        clean_functions2 = []
+        
+        for func in functions[:mid_point]:
+            clean_func = {k: v for k, v in func.items() 
+                         if k not in ['user_id', 'is_senior']}
+            clean_functions1.append(clean_func)
+            
+        for func in functions[mid_point:]:
+            clean_func = {k: v for k, v in func.items() 
+                         if k not in ['user_id', 'is_senior']}
+            clean_functions2.append(clean_func)
         
         return [
             {
                 "label": label1,
-                "functions": functions[:mid_point],
+                "functions": clean_functions1,
                 "component_type": "mixed",
                 "function_count": len(functions[:mid_point]),
                 "ui_style": get_ui_component_style("mixed")
             },
             {
                 "label": label2,
-                "functions": functions[mid_point:],
+                "functions": clean_functions2,
                 "component_type": "mixed",
                 "function_count": len(functions[mid_point:]),
                 "ui_style": get_ui_component_style("mixed")

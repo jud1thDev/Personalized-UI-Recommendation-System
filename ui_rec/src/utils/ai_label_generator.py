@@ -103,7 +103,7 @@ class AILabelGenerator:
         try:
             response = self.generator(
                 prompt,
-                max_new_tokens=15,  # max_length 제거, max_new_tokens만 사용
+                max_new_tokens=15, 
                 num_return_sequences=1,
                 temperature=0.7,
                 do_sample=True,
@@ -162,20 +162,16 @@ class AILabelGenerator:
         
         # fallback 라벨 (KB스타뱅킹 앱 기준)
         fallback_labels = {
-            "가입상품관리": ["상품", "가입", "관리"],
-            "자산관리": ["내 자산", "자산 관리"],
-            "공과금": ["공과금", "요금 납부"],
-            "외환": ["외환/환전"],
-            "금융편의": ["금융편의"],
-            "혜택": ["혜택"],
-            "생활/제휴": ["생활/제휴"],
-            "테마별서비스": ["테마별서비스"],
-            "사장님+": ["사장님+"]
+            "lifestyle": "생활",
+            "finance": "금융", 
+            "account": "계정",
+            "health": "건강",
+            "shopping": "쇼핑",
+            "travel": "여행",
+            "security": "보안"
         }
         
-        # 클러스터에 맞는 라벨 찾기
-        labels = fallback_labels.get(cluster, [cluster])
-        return labels[0] if labels else cluster
+        return fallback_labels.get(cluster, cluster)
 
 
 def create_ai_label_generator() -> AILabelGenerator:

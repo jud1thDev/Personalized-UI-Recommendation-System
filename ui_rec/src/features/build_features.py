@@ -54,34 +54,14 @@ def make_targets(uf: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     score = (uf["click_rate"]*0.5 + (uf["visit_duration"]/uf["visit_duration"].max())*0.3 + (uf["return_count"]/max(1,uf["return_count"].max()))*0.2)
     uf["exposure_label"] = (score > score.quantile(0.5)).astype(int)
 
-    # UI 유형 타깃: 사용자 타입에 따라 과거 관찰된 component_type 최빈값
-    # 시니어 사용자와 일반 사용자를 구분하여 처리
-    ui_type_data = []
-    for (user_id, function_id), group in df.groupby(["user_id","function_id"]):
-        # 사용자 타입 확인
-        is_senior = group["is_senior"].iloc[0]
-        
-        # 해당 사용자-기능 조합에서 가장 많이 사용된 컴포넌트 타입
-        most_common_component = group['component_type'].value_counts().index[0]
-        
-        ui_type_data.append({
-            "user_id": user_id,
-            "function_id": function_id,
-            "ui_type_label": most_common_component
-        })
-    
-    ui_type = pd.DataFrame(ui_type_data)
-
     # 그룹/소제목 타깃: 기능 메타로부터(최빈 cluster)
     cluster = df.groupby(["user_id","function_id"])['service_cluster'].agg(lambda x: x.value_counts().index[0]).rename("service_cluster_label")
-    # label 컬럼이 없으므로 제거
 
     # 배치 순서 타깃: 사용자 내 기능별 점수 내림차순 순위(1 = 최상단)
     uf["rank_score"] = score
     uf["rank_label"] = uf.groupby("user_id")["rank_score"].rank(ascending=False, method="first")
 
-    targets = uf.merge(ui_type, on=["user_id","function_id"], how="left") \
-                .merge(cluster.reset_index(), on=["user_id","function_id"], how="left")
+    targets = uf.merge(cluster.reset_index(), on=["user_id","function_id"], how="left")
     return targets
 
 
@@ -103,7 +83,7 @@ def main():
     targets = make_targets(uf, df)
     
     # 중복 컬럼 문제 해결: 필요한 컬럼만 선택
-    target_columns = ["user_id", "function_id", "exposure_label", "ui_type_label", "service_cluster_label", "rank_label"]
+    target_columns = ["user_id", "function_id", "exposure_label", "service_cluster_label", "rank_label"]
     targets_subset = targets[target_columns]
     
     feat = feat.merge(targets_subset, on=["user_id","function_id"], how="left")
@@ -134,7 +114,7 @@ def build_features_colab(events_path: str) -> str:
     targets = make_targets(uf, df)
     
     # 중복 컬럼 문제 해결: 필요한 컬럼만 선택
-    target_columns = ["user_id", "function_id", "exposure_label", "ui_type_label", "service_cluster_label", "rank_label"]
+    target_columns = ["user_id", "function_id", "exposure_label", "service_cluster_label", "rank_label"]
     targets_subset = targets[target_columns]
     
     feat = feat.merge(targets_subset, on=["user_id","function_id"], how="left")
