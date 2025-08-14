@@ -53,6 +53,7 @@ Personalized-UI-Recommendation-System/
         │   └── ui_type.py
         └── utils/             # 유틸리티 함수들
             ├── ai_label_generator.py
+            ├── component_mapping.py
             ├── features.py
             ├── icons.py
             ├── io.py
@@ -82,3 +83,4 @@ Personalized-UI-Recommendation-System/
 
 ### **5. 실행 완료 확인**
 모든 셀이 성공적으로 실행되면 `ui_home_outputs.json` 파일이 다운로드됨
+
