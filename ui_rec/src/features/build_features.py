@@ -45,13 +45,34 @@ def build_user_function(df: pd.DataFrame) -> pd.DataFrame:
     max_ts = df["timestamp"].max()
     last_access_days = (max_ts - grp["timestamp"].max()).dt.days.rename("last_access_days")
 
+    # 기능별 선호 시간대 추가
+    function_fav_time = df.groupby("function_id")["access_time_cluster"].agg(lambda x: x.value_counts().index[0]).rename("function_fav_time")
+
     uf = pd.concat([entry_count, click_rate, visit_duration, return_count, last_access_days], axis=1).reset_index()
+    
+    # 기능별 선호 시간대 정보 병합
+    uf = uf.merge(function_fav_time.reset_index(), on="function_id", how="left")
+    
     return uf
 
 
 def make_targets(uf: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
-    # 노출 여부 타깃: 클릭률/체류/재방문 가중 합이 임계치 이상
-    score = (uf["click_rate"]*0.5 + (uf["visit_duration"]/uf["visit_duration"].max())*0.3 + (uf["return_count"]/max(1,uf["return_count"].max()))*0.2)
+    # 노출 여부 타깃: 클릭률/체류/재방문/시간대매칭 가중 합이 임계치 이상
+    
+    # 시간대 매칭 점수 계산 (사용자 선호 시간대와 기능 선호 시간대 일치 여부)
+    # user_df에서 access_time_cluster 정보를 가져와야 함
+    user_time_pref = df.groupby("user_id")["access_time_cluster"].agg(lambda x: x.value_counts().index[0])
+    uf_with_user_time = uf.merge(user_time_pref.reset_index().rename(columns={"access_time_cluster": "user_fav_time"}), on="user_id", how="left")
+    
+    # 시간대 매칭 점수 (일치하면 1, 불일치하면 0)
+    time_match_score = (uf_with_user_time["user_fav_time"] == uf_with_user_time["function_fav_time"]).astype(float)
+    
+    # 기존 점수 계산 (가중치 조정: 시간대 매칭 20% 추가)
+    score = (uf["click_rate"]*0.4 + 
+             (uf["visit_duration"]/uf["visit_duration"].max())*0.2 + 
+             (uf["return_count"]/max(1,uf["return_count"].max()))*0.2 +
+             time_match_score*0.2)
+    
     uf["exposure_label"] = (score > score.quantile(0.5)).astype(int)
 
     # 그룹/소제목 타깃: 기능 메타로부터(최빈 cluster)
@@ -118,8 +139,9 @@ def build_features_colab(events_path: str) -> str:
     targets_subset = targets[target_columns]
     
     feat = feat.merge(targets_subset, on=["user_id","function_id"], how="left")
-
-    # Colab 환경에 맞는 경로로 저장
+    
+    # Colab 환경에서 저장
+    from ..utils.io import write_csv_with_timestamp
     path = write_csv_with_timestamp(feat, base_name="features", out_dir="ui_rec/data/processed")
     print(f"Saved features to {path}")
     return path 
